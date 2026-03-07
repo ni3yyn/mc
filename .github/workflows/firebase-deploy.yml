@@ -27,5 +27,4 @@ jobs:
         run: npx expo export -p web # This creates a 'dist' folder
         
       - name: Deploy to Firebase
-        # We use firebase-tools here because npx needs the full package name
-        run: npx firebase-tools deploy --only hosting --token "${{ secrets.FIREBASE_TOKEN }}"
+        run: npx firebase-tools deploy --only hosting --token "${{ secrets.FIREBASE_TOKEN }}" --project masterclass-dz
