@@ -8,21 +8,24 @@ jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
+      - name: Checkout Repository
+        uses: actions/checkout@v4 # Updated to v4
+
       - name: Use Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4 # Updated to v4
         with:
           node-version: '20'
+          cache: 'yarn' # This makes your builds faster
           
-      - name: Install Yarn
-        run: npm install -g yarn
+      - name: Enable Corepack
+        run: corepack enable # Modern way to use Yarn on Node 20
         
       - name: Install Dependencies
-        run: yarn install
+        run: yarn install --frozen-lockfile
         
       - name: Build Web App
-        run: npx expo export -p web
+        run: npx expo export -p web # This creates a 'dist' folder
         
       - name: Deploy to Firebase
-        run: npx firebase deploy --only hosting --token "${{ secrets.FIREBASE_TOKEN }}"
+        # We use firebase-tools here because npx needs the full package name
+        run: npx firebase-tools deploy --only hosting --token "${{ secrets.FIREBASE_TOKEN }}"

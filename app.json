@@ -23,8 +23,13 @@
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "output": "static",
+      "bundler": "webpack"
     },
+    "assetBundlePatterns": [
+      "**/*",
+      "node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/*.ttf"
+    ],
     "plugins": [
       "expo-router",
       "expo-font"

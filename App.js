@@ -492,6 +492,24 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    async function loadIconFonts() {
+      if (Platform.OS === 'web') {
+        try {
+          await Font.loadAsync({
+            ...MaterialIcons.font,
+            ...MaterialCommunityIcons.font,
+          });
+          console.log('Icon fonts loaded successfully');
+        } catch (error) {
+          console.error('Failed to load icon fonts:', error);
+        }
+      }
+    }
+    
+    loadIconFonts();
+  }, []);
+
   // Check for admin route on web
   useEffect(() => {
     if (Platform.OS === 'web') {
