@@ -23,16 +23,14 @@
       }
     },
     "web": {
-      "output": "static",
-      "bundler": "webpack"
+      "bundler": "metro"
     },
-    "assetBundlePatterns": [
-      "**/*",
-      "node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/*.ttf"
-    ],
     "plugins": [
       "expo-router",
       "expo-font"
+    ],
+    "assetBundlePatterns": [
+      "**/*"
     ]
   }
 }
