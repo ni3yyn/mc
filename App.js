@@ -13,6 +13,8 @@ import {
   Animated,
   Easing
 } from 'react-native';
+import * as Font from 'expo-font';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
