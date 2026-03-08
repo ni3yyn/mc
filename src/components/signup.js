@@ -18,7 +18,7 @@ import {
   Easing,
   PanResponder,
   BackHandler,
-  Dimensions
+  useWindowDimensions
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '../config/supabase';
@@ -27,8 +27,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // --- CONSTANTS ---
 const IS_WEB = Platform.OS === 'web';
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const IS_MOBILE = SCREEN_WIDTH < 768;
 
 const STORAGE_KEYS = {
   SIGNUP_FORM: 'signup_form_data',
@@ -48,7 +46,7 @@ const COLORS = {
   border: 'rgba(0, 0, 0, 0.08)',
   error: '#EF4444',
   errorBg: 'rgba(239, 68, 68, 0.1)',
-  overlay: 'rgba(0, 0, 0, 0.4)', // Lighter overlay for light theme
+  overlay: 'rgba(0, 0, 0, 0.5)', 
 };
 
 // --- HELPER: FACEBOOK PIXEL ---
@@ -61,14 +59,14 @@ const trackPixelEvent = (event, data = {}, isCustom = false) => {
 // --- HELPER: SHADOW GENERATOR ---
 const getShadow = (intensity = 1) => {
   if (IS_WEB) {
-    return { boxShadow: `0px ${4 * intensity}px ${16 * intensity}px rgba(0,0,0,${0.1 * intensity})` };
+    return { boxShadow: `0px ${8 * intensity}px ${24 * intensity}px rgba(0,0,0,${0.12 * intensity})` };
   }
   return {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 * intensity },
-    shadowOpacity: 0.1 * intensity,
-    shadowRadius: 10 * intensity,
-    elevation: 5 * intensity,
+    shadowOffset: { width: 0, height: 6 * intensity },
+    shadowOpacity: 0.15 * intensity,
+    shadowRadius: 12 * intensity,
+    elevation: 8 * intensity,
   };
 };
 
@@ -162,7 +160,7 @@ const ToggleSwitch = ({ label, value, onValueChange }) => {
                   width: buttonWidth,
                   transform:[{ 
                     translateX: slideAnim.interpolate({
-                      inputRange: [0, 1],
+                      inputRange:[0, 1],
                       outputRange:[0, buttonWidth]
                     }) 
                   }] 
@@ -216,8 +214,11 @@ const SuccessView = ({ name, onClose }) => {
   );
 };
 
-// --- REUSABLE SELECTION BOTTOM SHEET ---
+// --- REUSABLE SELECTION BOTTOM SHEET (DYNAMIC DESKTOP/MOBILE) ---
 const SelectionBottomSheet = ({ visible, onClose, data, onSelect, title, searchable = true }) => {
+    const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+    const isMobile = SCREEN_WIDTH < 768;
+
     const sheetAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const[isModalVisible, setIsModalVisible] = useState(visible);
@@ -227,16 +228,17 @@ const SelectionBottomSheet = ({ visible, onClose, data, onSelect, title, searcha
         if (visible) {
             setIsModalVisible(true);
             setSearchQuery('');
+            sheetAnim.setValue(isMobile ? SCREEN_HEIGHT : 30); // Desktop slides up slightly
             Animated.parallel([
                 Animated.timing(fadeAnim, {
                     toValue: 1,
                     duration: 300,
                     useNativeDriver: !IS_WEB,
                 }),
-                Animated.timing(sheetAnim, {
+                Animated.spring(sheetAnim, {
                     toValue: 0,
-                    duration: 400,
-                    easing: Easing.out(Easing.cubic),
+                    friction: 10,
+                    tension: 80,
                     useNativeDriver: !IS_WEB,
                 })
             ]).start();
@@ -244,12 +246,12 @@ const SelectionBottomSheet = ({ visible, onClose, data, onSelect, title, searcha
             Animated.parallel([
                 Animated.timing(fadeAnim, {
                     toValue: 0,
-                    duration: 300,
+                    duration: 250,
                     useNativeDriver: !IS_WEB,
                 }),
                 Animated.timing(sheetAnim, {
-                    toValue: SCREEN_HEIGHT,
-                    duration: 300,
+                    toValue: isMobile ? SCREEN_HEIGHT : 30,
+                    duration: 250,
                     easing: Easing.in(Easing.cubic),
                     useNativeDriver: !IS_WEB,
                 })
@@ -257,7 +259,7 @@ const SelectionBottomSheet = ({ visible, onClose, data, onSelect, title, searcha
                 setIsModalVisible(false);
             });
         }
-    }, [visible]);
+    }, [visible, isMobile]);
 
     const filteredData = data ? data.filter(item => {
         const text = item.name || item.label || '';
@@ -268,14 +270,27 @@ const SelectionBottomSheet = ({ visible, onClose, data, onSelect, title, searcha
 
     return (
         <Modal transparent visible={isModalVisible} animationType="none" onRequestClose={onClose}>
-            <View style={styles.sheetOverlay}>
+            <View style={[styles.sheetOverlay, {
+              justifyContent: isMobile ? 'flex-end' : 'center',
+              alignItems: isMobile ? undefined : 'center',
+              padding: isMobile ? 0 : 20,
+            }]}>
                 <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.overlay, opacity: fadeAnim }]} />
                 <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
                 
-                <Animated.View style={[styles.sheetContent, { transform:[{ translateY: sheetAnim }] }]}>
+                <Animated.View style={[
+                  styles.sheetContent, 
+                  getShadow(1),
+                  { 
+                    transform:[{ translateY: sheetAnim }],
+                    width: isMobile ? '100%' : 450,
+                    borderBottomLeftRadius: isMobile ? 0 : 24,
+                    borderBottomRightRadius: isMobile ? 0 : 24,
+                  }
+                ]}>
                     <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.bgWhite }]} />
-                    <View style={styles.dragHandle} />
-                    <ArText weight="700" style={{ fontSize: 18, marginBottom: 16 }}>{title}</ArText>
+                    {isMobile && <View style={styles.dragHandle} />}
+                    <ArText weight="700" style={{ fontSize: 18, marginBottom: 16, marginTop: isMobile ? 0 : 10 }}>{title}</ArText>
                     
                     {searchable && (
                         <View style={styles.searchBar}>
@@ -309,6 +324,9 @@ const SelectionBottomSheet = ({ visible, onClose, data, onSelect, title, searcha
 
 // --- MAIN MODAL COMPONENT ---
 export default function SignupModal({ visible, onClose }) {
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+  const isMobile = SCREEN_WIDTH < 768;
+
   const [form, setForm] = useState({ 
     name: '', 
     phone: '', 
@@ -331,7 +349,7 @@ export default function SignupModal({ visible, onClose }) {
   const[isLoadingStorage, setIsLoadingStorage] = useState(true);
 
   // --- ANIMATIONS ---
-  const sheetY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const slideAnim = useRef(new Animated.Value(1000)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scrollViewRef = useRef(null);
 
@@ -424,21 +442,22 @@ export default function SignupModal({ visible, onClose }) {
   // --- ANIMATION CONTROLS ---
   useEffect(() => {
     if (visible) {
+      slideAnim.setValue(isMobile ? SCREEN_HEIGHT : 40); // Initial position
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 300,
           useNativeDriver: !IS_WEB,
         }),
-        Animated.spring(sheetY, {
+        Animated.spring(slideAnim, {
           toValue: 0,
-          friction: 10,
-          tension: 80,
+          friction: 9,
+          tension: 70,
           useNativeDriver: !IS_WEB,
         }),
       ]).start();
     }
-  }, [visible]);
+  },[visible, isMobile]);
 
   const handleCloseAnimation = (callback) => {
     Keyboard.dismiss();
@@ -448,8 +467,8 @@ export default function SignupModal({ visible, onClose }) {
         duration: 250,
         useNativeDriver: !IS_WEB,
       }),
-      Animated.timing(sheetY, {
-        toValue: SCREEN_HEIGHT,
+      Animated.timing(slideAnim, {
+        toValue: isMobile ? SCREEN_HEIGHT : 40,
         duration: 300,
         easing: Easing.in(Easing.cubic),
         useNativeDriver: !IS_WEB,
@@ -465,11 +484,12 @@ export default function SignupModal({ visible, onClose }) {
     });
   };
 
-  // --- PanResponder ---
+  // --- PanResponder (Enabled on Mobile only) ---
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
+        if (!isMobile) return false; // Disable dragging on desktop
         const shouldSet = isScrollAtTop && gestureState.dy > 10 && Math.abs(gestureState.dx) < 5;
         if (shouldSet) {
           setIsDragging(true);
@@ -478,16 +498,16 @@ export default function SignupModal({ visible, onClose }) {
         return false;
       },
       onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0 && isDragging) {
-          sheetY.setValue(gestureState.dy);
+        if (gestureState.dy > 0 && isDragging && isMobile) {
+          slideAnim.setValue(gestureState.dy);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        if (isDragging) {
+        if (isDragging && isMobile) {
           if (gestureState.dy > 100 || gestureState.vy > 0.7) {
             fullClose();
           } else {
-            Animated.spring(sheetY, {
+            Animated.spring(slideAnim, {
               toValue: 0,
               friction: 7,
               useNativeDriver: !IS_WEB,
@@ -548,7 +568,7 @@ export default function SignupModal({ visible, onClose }) {
         name: form.name,
         wilaya: form.wilaya,
         capital: form.budget
-      }, true); // true = trackCustom
+      }, true); 
       
       await clearFormStorage();
       setIsSuccess(true);
@@ -586,24 +606,35 @@ export default function SignupModal({ visible, onClose }) {
           style={{ flex: 1 }} 
           pointerEvents="box-none"
         >
-          <View style={[styles.bottomSheetWrapper, !IS_MOBILE && styles.bottomSheetWrapperDesktop]}>
+          <View style={[styles.bottomSheetWrapper, {
+            justifyContent: isMobile ? 'flex-end' : 'center',
+            alignItems: isMobile ? undefined : 'center',
+            padding: isMobile ? 0 : 20,
+          }]}>
             <Animated.View 
-              style={[styles.sheetContainer, getShadow(2), { 
-                width: IS_MOBILE ? '100%' : 600, 
-                height: IS_MOBILE ? SCREEN_HEIGHT * 0.96 : 850,
-                transform: [{ translateY: sheetY }] 
-              }]}
+              style={[
+                styles.sheetContainer, 
+                getShadow(2), 
+                { 
+                  width: isMobile ? '100%' : 550, 
+                  maxHeight: isMobile ? SCREEN_HEIGHT * 0.95 : SCREEN_HEIGHT * 0.9,
+                  borderBottomLeftRadius: isMobile ? 0 : 30,
+                  borderBottomRightRadius: isMobile ? 0 : 30,
+                  transform: [{ translateY: slideAnim }] 
+                }
+              ]}
               {...panResponder.panHandlers}
             >
               <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.bgWhite }]} />
-              <View style={styles.dragHandle} />
+              
+              {isMobile && <View style={styles.dragHandle} />}
 
               {isSuccess ? (
                 <SuccessView name={form.name} onClose={fullClose} />
               ) : (
                 <ScrollView 
                   ref={scrollViewRef}
-                  contentContainerStyle={styles.scrollContent} 
+                  contentContainerStyle={[styles.scrollContent, { paddingTop: isMobile ? 10 : 30 }]} 
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
                   scrollEventThrottle={16}
@@ -733,11 +764,7 @@ const styles = StyleSheet.create({
   },
   bottomSheetWrapper: { 
     flex: 1, 
-    justifyContent: 'flex-end', 
     pointerEvents: 'box-none' 
-  },
-  bottomSheetWrapperDesktop: {
-    alignItems: 'center',
   },
   sheetContainer: {
     backgroundColor: 'transparent',
@@ -755,8 +782,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   scrollContent: { 
-    padding: 30, 
-    paddingTop: 10, 
+    paddingHorizontal: 30,
     paddingBottom: 50 
   },
   header: { 
@@ -912,7 +938,6 @@ const styles = StyleSheet.create({
   },
   sheetOverlay: { 
     flex: 1, 
-    justifyContent: 'flex-end',
     backgroundColor: 'transparent',
   },
   sheetContent: {
