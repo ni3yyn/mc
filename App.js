@@ -180,12 +180,12 @@ const BlurCard = ({ style, children }) => (
 
 const BrandBackground = () => (
   <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.bgMain, overflow: 'hidden' }]} pointerEvents="none">
-    <View style={[styles.redSun, { backgroundColor: 'rgba(239, 68, 68, 0.12)' }]} />
-    <View style={[styles.redSun, { backgroundColor: 'rgba(239, 68, 68, 0.06)', transform:[{ scale: 1.9 }] }]} />
+    <View style={[styles.redSun, { backgroundColor: 'rgba(239, 68, 68, 0.4)' }]} />
+    <View style={[styles.redSun, { backgroundColor: 'rgba(239, 68, 68, 0.2)', transform:[{ scale: 1.9 }] }]} />
     <View style={[styles.greenWave1, { opacity: 0.12 }]} />
     <View style={[styles.greenWave2, { opacity: 0.12 }]} />
     <View style={[styles.greenWave3, { opacity: 0.12 }]} />
-    <View style={[styles.lineArtGrid, { borderColor: 'rgba(14, 178, 124, 0.12)' }]} />
+    <View style={[styles.lineArtGrid, { borderColor: 'rgba(14, 178, 124, 0.2)' }]} />
   </View>
 );
 
@@ -330,16 +330,33 @@ const ArText = ({ style, children, weight = '400', align = 'right', ...props }) 
 };
 
 // --- BUTTONS ---
-const PrimaryButton = ({ title, icon, onPress, style, pixelEvent }) => (
+const PrimaryButton = ({ title, icon, onPress, style, pixelEvent, center }) => (
   <Pressable 
     onPress={() => {
       if (pixelEvent) trackPixelEvent(pixelEvent, { button_name: title });
       onPress?.();
     }}
-    style={({pressed}) =>[styles.btnBase, styles.btnPrimary, pressed && { opacity: 0.9, transform:[{scale: 0.98}] }, style]}
+    style={({pressed}) =>[
+      styles.btnBase, 
+      styles.btnPrimary, 
+      pressed && { opacity: 0.9, transform:[{scale: 0.98}] }, 
+      style
+    ]}
   >
-    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-      <ArText style={styles.btnTextPrimary} weight="700" align="right">{title}</ArText>
+    <View style={{ 
+      flexDirection: 'row-reverse', 
+      alignItems: 'center', 
+      justifyContent: center ? 'center' : 'space-between', // Centers if 'center' prop is true
+      width: '100%',
+      gap: center ? 8 : 0 
+    }}>
+      <ArText 
+        style={styles.btnTextPrimary} 
+        weight="700" 
+        align={center ? "center" : "right"}
+      >
+        {title}
+      </ArText>
       {icon && <MaterialIcons name={icon} size={20} color={COLORS.bgWhite} />}
     </View>
   </Pressable>
@@ -466,9 +483,15 @@ export default function App() {
         {/* HERO SECTION */}
         <View style={styles.heroSection}>
           <MaxWidthContainer>
-            <View style={{ flexDirection: isDesktop ? 'row-reverse' : 'column', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: isDesktop ? 60 : 40 }}>
+            <View style={{ 
+              flexDirection: isDesktop ? 'row-reverse' : 'column', 
+              alignItems: 'center', 
+              justifyContent: 'space-between', 
+              width: '100%', 
+              gap: isDesktop ? 60 : 40 
+            }}>
               
-              {/* Text: Slides in from Right (Arabic direction) */}
+              {/* Text: Slides in from Right */}
               <ScrollReveal direction="right" style={{ flex: 1.2, alignItems: isDesktop ? 'flex-end' : 'center', zIndex: 10 }}>
                 <View style={[styles.heroBadge, { alignSelf: isDesktop ? 'flex-end' : 'center' }]}>
                   <ArText style={styles.badgeText} weight="700">دورة تدريبية عملية 100%</ArText>
@@ -477,19 +500,47 @@ export default function App() {
 
                 <View style={[styles.titleWrapper, { alignItems: isDesktop ? 'flex-end' : 'center' }]}>
                   <ArText style={[styles.heroHeading, { textAlign: isDesktop ? 'right' : 'center', marginBottom: 0 }]} weight="900">من الصفر حتى</ArText>
-                  <TypewriterText texts={['أول شحنة', 'أول ربح', 'ألف قطعة', 'الوصول']} speed={60} delay={1500} style={[styles.heroHeading, styles.heroHeadingDynamic, { textAlign: isDesktop ? 'right' : 'center' }]} />
+                  <TypewriterText 
+                    texts={['أول شحنة', 'أول ربح', 'ألف قطعة', 'الوصول']} 
+                    speed={60} 
+                    delay={1500} 
+                    style={[styles.heroHeading, styles.heroHeadingDynamic, { textAlign: isDesktop ? 'right' : 'center' }]} 
+                  />
                 </View>
 
-                <ArText style={styles.heroSub} align={isDesktop ? 'right' : 'center'}>ستتعلم المسار الكامل للإستيراد بطريقة واضحة وعملية من معرض كانتون فير بدل الاعتماد على معلومات متفرقة و غير واضحة.</ArText>
+                <ArText style={styles.heroSub} align={isDesktop ? 'right' : 'center'}>
+                  ستتعلم المسار الكامل للإستيراد بطريقة واضحة وعملية من معرض كانتون فير بدل الاعتماد على معلومات متفرقة و غير واضحة.
+                </ArText>
 
                 <View style={[styles.heroBtnGroup, { justifyContent: isDesktop ? 'flex-end' : 'center' }]}>
-                  <PrimaryButton title="سجل الآن" icon="arrow-back" style={{ flexGrow: 1, flexBasis: 180, maxWidth: 350 }} onPress={() => setSignupVisible(true)} pixelEvent="HeroSignupClick" />
-                  <OutlineButton title={isReadMoreClicked ? "بالطبع" : "قراءة المزيد"} icon={isReadMoreClicked ? "check" : "arrow-downward"} isSuccess={isReadMoreClicked} style={{ flexGrow: 1, flexBasis: 180, maxWidth: 350 }} onPress={handleReadMoreClick} />
+                  <PrimaryButton 
+                    title="سجل الآن" 
+                    icon="arrow-back" 
+                    style={{ flexGrow: 1, flexBasis: 180, maxWidth: 350 }} 
+                    onPress={() => setSignupVisible(true)} 
+                    pixelEvent="HeroSignupClick" 
+                  />
+                  <OutlineButton 
+                    title={isReadMoreClicked ? "بالطبع" : "قراءة المزيد"} 
+                    icon={isReadMoreClicked ? "check" : "arrow-downward"} 
+                    isSuccess={isReadMoreClicked} 
+                    style={{ flexGrow: 1, flexBasis: 180, maxWidth: 350 }} 
+                    onPress={handleReadMoreClick} 
+                  />
                 </View>
               </ScrollReveal>
 
-              {/* Image: Slides in from Left (Meeting the text) */}
-              <ScrollReveal direction="left" delay={200} style={{ flex: 1, width: '100%', alignItems: 'center' }}>
+              {/* Image: Slides in from Left - WITH ADDED MOBILE MARGIN */}
+              <ScrollReveal 
+                direction="left" 
+                delay={200} 
+                style={{ 
+                  flex: 1, 
+                  width: '100%', 
+                  alignItems: 'center',
+                  marginBottom: width < 768 ? 60 : 0 // <--- Adds 60px space on mobile only
+                }}
+              >
                 <HeroImageShowcase />
               </ScrollReveal>
 
@@ -527,7 +578,7 @@ export default function App() {
         </View>
 
         {/* TIMELINE */}
-        <View style={{ backgroundColor: COLORS.bgWhite, paddingVertical: 80, borderTopWidth: 1, borderTopColor: COLORS.border }}>
+        <View style={{ backgroundColor: 'transparent', paddingVertical: 80, borderTopWidth: 1, borderTopColor: COLORS.border }}>
           <MaxWidthContainer>
             <ScrollReveal direction="up" style={{ alignItems: 'center', marginBottom: 60, width: '100%' }}>
               <ArText style={styles.eyebrow} weight="700" align="center">المسار الكامل</ArText>
@@ -564,13 +615,13 @@ export default function App() {
         </View>
 
         {/* OUTCOMES SECTION */}
-        <View style={{ paddingVertical: 80, backgroundColor: COLORS.bgMain }}>
+        <View style={{ paddingVertical: 80, backgroundColor: 'transparent' }}>
           <MaxWidthContainer>
-            <View style={{ flexDirection: isDesktop ? 'row-reverse' : 'column', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: isDesktop ? 60 : 20 }}>
+            <View style={{ flexDirection: isDesktop ? 'row-reverse' : 'column', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: isDesktop ? 60 : 0 }}>
               
               <ScrollReveal direction="right" style={{ flex: 1, alignItems: isDesktop ? 'flex-end' : 'center', width: '100%' }}>
                 <ArText style={styles.sectionTitle} weight="900" align={isDesktop ? "right" : "center"}>نتيجة هذا <Text style={{ color: COLORS.primary }}>التكوين</Text></ArText>
-                <ArText style={[styles.sectionSub, { marginBottom: isDesktop ? 0 : 10 }]} align={isDesktop ? "right" : "center"}>بناء أساس متين لمشروع تجاري مربح ومستدام.</ArText>
+                <ArText style={[styles.sectionSub, { marginBottom: isDesktop ? 0 : 0 }]} align={isDesktop ? "right" : "center"}>بناء أساس متين لمشروع تجاري مربح ومستدام.</ArText>
               </ScrollReveal>
 
               <View style={{ flex: 1.2, width: '100%', gap: 12 }}> 
@@ -620,7 +671,7 @@ export default function App() {
                 <BlurCard style={styles.pricingCard}>
                   <View style={styles.priceRow}>
                     <View style={{ flexGrow: 1, flexBasis: 200 }}>
-                      <PrimaryButton title="سجل في الدورة الآن" style={{ paddingHorizontal: 40 }} onPress={() => setSignupVisible(true)} pixelEvent="CTASignupClick" />
+                      <PrimaryButton title="سجل في الدورة الآن" style={{ paddingHorizontal: 40 }} onPress={() => setSignupVisible(true)} pixelEvent="CTASignupClick" center />
                     </View>
                     <View style={styles.priceInfo}>
                       <ArText style={styles.priceLabel} align="right">سعر التكوين</ArText>
