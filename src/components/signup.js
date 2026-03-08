@@ -36,18 +36,19 @@ const STORAGE_KEYS = {
 };
 const FORM_EXPIRY_DAYS = 7;
 
+// --- LIGHT THEME TOKENS ---
 const COLORS = {
   primary: '#0EB27C',
-  primaryLight: 'rgba(14, 178, 124, 0.15)',
-  bgDark: '#0D1B22',
-  bgDarker: '#081116',
-  surface: 'rgba(255, 255, 255, 0.03)',
-  border: 'rgba(255, 255, 255, 0.12)',
-  error: '#FF453A',
-  errorBg: 'rgba(255, 69, 58, 0.1)',
-  textWhite: '#F8FAFC',
-  textGray: '#94A3B8',
-  overlay: 'rgba(0, 0, 0, 0.7)',
+  primaryLight: 'rgba(14, 178, 124, 0.1)',
+  bgMain: '#F4F7F6',        // Soft light off-white for inputs/backgrounds
+  bgWhite: '#FFFFFF',       // Pure white for sheets/cards
+  textMain: '#0F172A',      // Deep Slate 900 for headings/inputs
+  textMuted: '#475569',     // Slate 600 for labels/descriptions
+  textLight: '#94A3B8',     // Slate 400 for placeholders
+  border: 'rgba(0, 0, 0, 0.08)',
+  error: '#EF4444',
+  errorBg: 'rgba(239, 68, 68, 0.1)',
+  overlay: 'rgba(0, 0, 0, 0.4)', // Lighter overlay for light theme
 };
 
 // --- HELPER: FACEBOOK PIXEL ---
@@ -60,13 +61,13 @@ const trackPixelEvent = (event, data = {}, isCustom = false) => {
 // --- HELPER: SHADOW GENERATOR ---
 const getShadow = (intensity = 1) => {
   if (IS_WEB) {
-    return { boxShadow: `0px ${4 * intensity}px ${12 * intensity}px rgba(0,0,0,${0.2 * intensity})` };
+    return { boxShadow: `0px ${4 * intensity}px ${16 * intensity}px rgba(0,0,0,${0.1 * intensity})` };
   }
   return {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 * intensity },
-    shadowOpacity: 0.2 * intensity,
-    shadowRadius: 8 * intensity,
+    shadowOpacity: 0.1 * intensity,
+    shadowRadius: 10 * intensity,
     elevation: 5 * intensity,
   };
 };
@@ -77,7 +78,7 @@ const ArText = ({ style, children, weight = '400', align = 'right', ...props }) 
   if (weight === '700') fontFamily = 'Tajawal-Bold';
   if (weight === '900') fontFamily = 'Tajawal-Black';
   return (
-    <Text {...props} style={[{ textAlign: align, color: COLORS.textWhite, writingDirection: 'rtl', fontFamily }, style]}>
+    <Text {...props} style={[{ textAlign: align, color: COLORS.textMain, writingDirection: 'rtl', fontFamily }, style]}>
       {children}
     </Text>
   );
@@ -93,7 +94,7 @@ const InputField = ({ icon, label, placeholder, value, onChangeText, error, keyb
         <TextInput 
           style={[styles.input, { writingDirection: 'rtl' }]} 
           placeholder={placeholder} 
-          placeholderTextColor={COLORS.textGray} 
+          placeholderTextColor={COLORS.textLight} 
           value={value} 
           onChangeText={onChangeText} 
           keyboardType={keyboardType} 
@@ -102,7 +103,7 @@ const InputField = ({ icon, label, placeholder, value, onChangeText, error, keyb
           onBlur={() => setIsFocused(false)} 
         />
         <View style={styles.inputIcon}>
-          <MaterialIcons name={icon} size={22} color={error ? COLORS.error : (isFocused ? COLORS.primary : COLORS.textGray)} />
+          <MaterialIcons name={icon} size={22} color={error ? COLORS.error : (isFocused ? COLORS.primary : COLORS.textMuted)} />
         </View>
       </View>
       {error && <ArText style={styles.errorText} align="right">{error}</ArText>}
@@ -116,13 +117,13 @@ const DropdownTrigger = ({ icon, label, placeholder, onPress, value, error }) =>
         <Pressable onPress={onPress}>
             <View style={[styles.inputContainer, error && styles.inputError]}>
                 <View style={{ paddingLeft: 16, justifyContent: 'center' }}>
-                    <MaterialIcons name="keyboard-arrow-down" size={24} color={error ? COLORS.error : COLORS.textGray} />
+                    <MaterialIcons name="keyboard-arrow-down" size={24} color={error ? COLORS.error : COLORS.textMuted} />
                 </View>
                 <View style={{ flex: 1, paddingHorizontal: 4, justifyContent: 'center' }}>
-                    <ArText align="right" style={{ fontSize: 16, color: value ? COLORS.textWhite : COLORS.textGray }}>{value || placeholder}</ArText>
+                    <ArText align="right" style={{ fontSize: 16, color: value ? COLORS.textMain : COLORS.textLight }}>{value || placeholder}</ArText>
                 </View>
                 <View style={styles.inputIcon}>
-                  <MaterialIcons name={icon} size={22} color={error ? COLORS.error : (value ? COLORS.primary : COLORS.textGray)} />
+                  <MaterialIcons name={icon} size={22} color={error ? COLORS.error : (value ? COLORS.primary : COLORS.textMuted)} />
                 </View>
             </View>
         </Pressable>
@@ -131,7 +132,7 @@ const DropdownTrigger = ({ icon, label, placeholder, onPress, value, error }) =>
 );
 
 const ToggleSwitch = ({ label, value, onValueChange }) => {
-    const [containerWidth, setContainerWidth] = useState(0);
+    const[containerWidth, setContainerWidth] = useState(0);
     const slideAnim = useRef(new Animated.Value(value ? 1 : 0)).current;
   
     useEffect(() => {
@@ -172,7 +173,7 @@ const ToggleSwitch = ({ label, value, onValueChange }) => {
           
           <Pressable style={styles.toggleBtn} onPress={() => onValueChange(false)}>
             <ArText 
-              style={{ color: value ? COLORS.textGray : COLORS.bgDark }} 
+              style={{ color: value ? COLORS.textMuted : COLORS.bgWhite }} 
               weight="700"
             >
               لا، لم أزره
@@ -181,7 +182,7 @@ const ToggleSwitch = ({ label, value, onValueChange }) => {
           
           <Pressable style={styles.toggleBtn} onPress={() => onValueChange(true)}>
             <ArText 
-              style={{ color: value ? COLORS.bgDark : COLORS.textGray }} 
+              style={{ color: value ? COLORS.bgWhite : COLORS.textMuted }} 
               weight="700"
             >
               نعم، زرت المعرض
@@ -209,7 +210,7 @@ const SuccessView = ({ name, onClose }) => {
         مرحباً بك {name}، لقد تم استلام طلبك.{'\n'}سيقوم فريقنا بالاتصال بك قريباً لتأكيد الحجز.
       </ArText>
       <Pressable onPress={onClose} style={styles.successBtn}>
-        <ArText weight="700" style={{ color: COLORS.bgDark }}>ممتاز، شكراً لكم</ArText>
+        <ArText weight="700" style={{ color: COLORS.bgWhite }}>ممتاز، شكراً لكم</ArText>
       </Pressable>
     </View>
   );
@@ -219,7 +220,7 @@ const SuccessView = ({ name, onClose }) => {
 const SelectionBottomSheet = ({ visible, onClose, data, onSelect, title, searchable = true }) => {
     const sheetAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
-    const [isModalVisible, setIsModalVisible] = useState(visible);
+    const[isModalVisible, setIsModalVisible] = useState(visible);
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
@@ -271,17 +272,17 @@ const SelectionBottomSheet = ({ visible, onClose, data, onSelect, title, searcha
                 <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.overlay, opacity: fadeAnim }]} />
                 <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
                 
-                <Animated.View style={[styles.sheetContent, { transform: [{ translateY: sheetAnim }] }]}>
-                    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0D1B22' }]} />
+                <Animated.View style={[styles.sheetContent, { transform:[{ translateY: sheetAnim }] }]}>
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.bgWhite }]} />
                     <View style={styles.dragHandle} />
                     <ArText weight="700" style={{ fontSize: 18, marginBottom: 16 }}>{title}</ArText>
                     
                     {searchable && (
                         <View style={styles.searchBar}>
-                            <MaterialIcons name="search" size={20} color={COLORS.textGray} />
+                            <MaterialIcons name="search" size={20} color={COLORS.textMuted} />
                             <TextInput 
                               placeholder="بحث..." 
-                              placeholderTextColor={COLORS.textGray} 
+                              placeholderTextColor={COLORS.textLight} 
                               style={[styles.searchInput, { writingDirection: 'rtl' }]} 
                               onChangeText={setSearchQuery} 
                               value={searchQuery}
@@ -325,7 +326,7 @@ export default function SignupModal({ visible, onClose }) {
   const [showWilayaModal, setShowWilayaModal] = useState(false);
   const[showBudgetModal, setShowBudgetModal] = useState(false);
 
-  const [isScrollAtTop, setIsScrollAtTop] = useState(true);
+  const[isScrollAtTop, setIsScrollAtTop] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const[isLoadingStorage, setIsLoadingStorage] = useState(true);
 
@@ -594,7 +595,7 @@ export default function SignupModal({ visible, onClose }) {
               }]}
               {...panResponder.panHandlers}
             >
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0D1B22' }]} />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.bgWhite }]} />
               <View style={styles.dragHandle} />
 
               {isSuccess ? (
@@ -615,7 +616,7 @@ export default function SignupModal({ visible, onClose }) {
                 >
                   <View style={styles.header}>
                       <Pressable onPress={fullClose} style={styles.closeBtn}>
-                        <MaterialIcons name="close" size={24} color={COLORS.textWhite} />
+                        <MaterialIcons name="close" size={24} color={COLORS.textMain} />
                       </Pressable>
                       <View>
                         <ArText weight="900" style={styles.titleText}>معلومات التسجيل</ArText>
@@ -688,10 +689,10 @@ export default function SignupModal({ visible, onClose }) {
                     disabled={loading} 
                     style={({pressed}) =>[styles.submitBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
                   >
-                      {loading ? <ActivityIndicator color={COLORS.bgDark} /> : (
+                      {loading ? <ActivityIndicator color={COLORS.bgWhite} /> : (
                         <View style={styles.submitContent}>
                             <ArText weight="900" style={styles.submitText}>إتمام التسجيل</ArText>
-                            <MaterialIcons name="arrow-back" size={24} color={COLORS.bgDark} />
+                            <MaterialIcons name="arrow-back" size={24} color={COLORS.bgWhite} />
                         </View>
                       )}
                   </Pressable>
@@ -742,15 +743,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderTopLeftRadius: 30, 
     borderTopRightRadius: 30,
-    borderWidth: 1, 
-    borderColor: 'rgba(255,255,255,0.1)',
     overflow: 'hidden',
   },
   dragHandle: { 
     width: 40, 
     height: 5, 
     borderRadius: 3, 
-    backgroundColor: 'rgba(255,255,255,0.3)', 
+    backgroundColor: 'rgba(0,0,0,0.15)', 
     alignSelf: 'center', 
     marginTop: 12,
     zIndex: 10,
@@ -767,7 +766,7 @@ const styles = StyleSheet.create({
   },
   closeBtn: { 
     padding: 8, 
-    backgroundColor: 'rgba(255,255,255,0.1)', 
+    backgroundColor: 'rgba(0,0,0,0.05)', 
     borderRadius: 20, 
     height: 40, 
     width: 40, 
@@ -776,25 +775,25 @@ const styles = StyleSheet.create({
   },
   titleText: { 
     fontSize: 24, 
-    color: COLORS.textWhite, 
+    color: COLORS.textMain, 
     textAlign: 'right' 
   },
   subTitleText: { 
     fontSize: 14, 
-    color: COLORS.textGray, 
+    color: COLORS.textMuted, 
     textAlign: 'right', 
     marginTop: 4 
   },
   inputLabel: { 
     fontSize: 14, 
-    color: COLORS.textWhite, 
+    color: COLORS.textMuted, 
     marginBottom: 8, 
     paddingRight: 4 
   },
   inputContainer: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: COLORS.bgMain,
     borderWidth: 1, 
     borderColor: COLORS.border, 
     borderRadius: 12, 
@@ -802,16 +801,16 @@ const styles = StyleSheet.create({
   },
   inputFocused: { 
     borderColor: COLORS.primary, 
-    backgroundColor: 'rgba(14, 178, 124, 0.1)', 
+    backgroundColor: COLORS.primaryLight, 
   },
   inputError: { 
     borderColor: COLORS.error, 
-    backgroundColor: 'rgba(255, 69, 58, 0.1)', 
+    backgroundColor: COLORS.errorBg, 
   },
   input: { 
     flex: 1, 
     height: '100%', 
-    color: COLORS.textWhite, 
+    color: COLORS.textMain, 
     fontFamily: 'Tajawal-Bold', 
     paddingHorizontal: 20, 
     fontSize: 16,
@@ -828,7 +827,7 @@ const styles = StyleSheet.create({
   },
   toggleContainer: { 
     flexDirection: 'row', 
-    backgroundColor: 'rgba(255,255,255,0.08)', 
+    backgroundColor: COLORS.bgMain, 
     borderRadius: 12, 
     padding: 4, 
     borderWidth: 1, 
@@ -857,7 +856,12 @@ const styles = StyleSheet.create({
     height: 60, 
     borderRadius: 16, 
     alignItems: 'center', 
-    justifyContent: 'center' 
+    justifyContent: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 5,
   },
   submitContent: {
     flexDirection: 'row-reverse',
@@ -865,7 +869,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   submitText: { 
-    color: COLORS.bgDark, 
+    color: COLORS.bgWhite, 
     fontSize: 18 
   },
   successContainer: { 
@@ -887,13 +891,13 @@ const styles = StyleSheet.create({
   },
   successTitle: { 
     fontSize: 28, 
-    color: COLORS.textWhite, 
+    color: COLORS.textMain, 
     marginBottom: 12, 
     textAlign: 'center' 
   },
   successDesc: { 
     fontSize: 16, 
-    color: COLORS.textGray, 
+    color: COLORS.textMuted, 
     lineHeight: 26, 
     marginBottom: 40, 
     textAlign: 'center' 
@@ -918,11 +922,11 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     padding: 20, 
     overflow: 'hidden',
-    backgroundColor: '#0D1B22',
+    backgroundColor: COLORS.bgWhite,
   },
   searchBar: { 
     flexDirection: 'row', 
-    backgroundColor: 'rgba(0,0,0,0.3)', 
+    backgroundColor: COLORS.bgMain, 
     borderRadius: 12, 
     padding: 10, 
     marginBottom: 10, 
@@ -932,7 +936,7 @@ const styles = StyleSheet.create({
   },
   searchInput: { 
     flex: 1, 
-    color: '#fff', 
+    color: COLORS.textMain, 
     textAlign: 'right', 
     marginLeft: 10, 
     fontFamily: 'Tajawal-Regular', 
@@ -941,7 +945,7 @@ const styles = StyleSheet.create({
   listItem: { 
     paddingVertical: 16, 
     borderBottomWidth: 1, 
-    borderBottomColor: 'rgba(255,255,255,0.05)' 
+    borderBottomColor: COLORS.border 
   },
   loadingContainer: {
     flex: 1,
@@ -951,7 +955,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: COLORS.textWhite,
+    color: COLORS.bgWhite,
   },
 });
 // --- END OF FILE signup.js ---
