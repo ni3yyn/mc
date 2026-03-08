@@ -1,3 +1,5 @@
+// --- START OF FILE signup.js ---
+
 import React, { useEffect, useRef, useState } from 'react';
 import {
   StyleSheet,
@@ -7,7 +9,6 @@ import {
   Pressable,
   TextInput,
   Animated,
-  useWindowDimensions,
   Platform,
   KeyboardAvoidingView,
   Keyboard,
@@ -16,22 +17,24 @@ import {
   FlatList,
   Easing,
   PanResponder,
-  BackHandler
+  BackHandler,
+  Dimensions
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { supabase } from '../config/supabase';
 import FORM_CONFIG from '../data/formConfig.json';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import ReactPixel from 'react-facebook-pixel';
 
 // --- CONSTANTS ---
 const IS_WEB = Platform.OS === 'web';
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const IS_MOBILE = SCREEN_WIDTH < 768;
+
 const STORAGE_KEYS = {
   SIGNUP_FORM: 'signup_form_data',
   SIGNUP_FORM_TIMESTAMP: 'signup_form_timestamp'
 };
-const FORM_EXPIRY_DAYS = 7; // Keep form data for 7 days
+const FORM_EXPIRY_DAYS = 7;
 
 const COLORS = {
   primary: '#0EB27C',
@@ -44,8 +47,14 @@ const COLORS = {
   errorBg: 'rgba(255, 69, 58, 0.1)',
   textWhite: '#F8FAFC',
   textGray: '#94A3B8',
-  blueTint: 'rgba(0, 100, 200, 0.1)',
-  blueTintLight: 'rgba(0, 50, 100, 0.15)',
+  overlay: 'rgba(0, 0, 0, 0.7)',
+};
+
+// --- HELPER: FACEBOOK PIXEL ---
+const trackPixelEvent = (event, data = {}, isCustom = false) => {
+  if (IS_WEB && typeof window !== 'undefined' && window.fbq) {
+    window.fbq(isCustom ? 'trackCustom' : 'track', event, data);
+  }
 };
 
 // --- HELPER: SHADOW GENERATOR ---
@@ -76,13 +85,13 @@ const ArText = ({ style, children, weight = '400', align = 'right', ...props }) 
 
 // --- FORM COMPONENTS ---
 const InputField = ({ icon, label, placeholder, value, onChangeText, error, keyboardType = 'default' }) => {
-  const [isFocused, setIsFocused] = useState(false);
+  const[isFocused, setIsFocused] = useState(false);
   return (
     <View style={{ marginBottom: 16 }}>
       <ArText weight="700" style={styles.inputLabel}>{label}</ArText>
       <View style={[ styles.inputContainer, isFocused && styles.inputFocused, error && styles.inputError ]}>
         <TextInput 
-          style={styles.input} 
+          style={[styles.input, { writingDirection: 'rtl' }]} 
           placeholder={placeholder} 
           placeholderTextColor={COLORS.textGray} 
           value={value} 
@@ -106,8 +115,11 @@ const DropdownTrigger = ({ icon, label, placeholder, onPress, value, error }) =>
         <ArText weight="700" style={styles.inputLabel}>{label}</ArText>
         <Pressable onPress={onPress}>
             <View style={[styles.inputContainer, error && styles.inputError]}>
-                <View style={{ flex: 1, paddingHorizontal: 20, justifyContent: 'center' }}>
-                    <ArText align="right" style={{ fontSize: 15, color: value ? COLORS.textWhite : COLORS.textGray }}>{value || placeholder}</ArText>
+                <View style={{ paddingLeft: 16, justifyContent: 'center' }}>
+                    <MaterialIcons name="keyboard-arrow-down" size={24} color={error ? COLORS.error : COLORS.textGray} />
+                </View>
+                <View style={{ flex: 1, paddingHorizontal: 4, justifyContent: 'center' }}>
+                    <ArText align="right" style={{ fontSize: 16, color: value ? COLORS.textWhite : COLORS.textGray }}>{value || placeholder}</ArText>
                 </View>
                 <View style={styles.inputIcon}>
                   <MaterialIcons name={icon} size={22} color={error ? COLORS.error : (value ? COLORS.primary : COLORS.textGray)} />
@@ -118,55 +130,45 @@ const DropdownTrigger = ({ icon, label, placeholder, onPress, value, error }) =>
     </View>
 );
 
-const ChipsSelector = ({ label, options, selected, onSelect, error }) => (
-    <View style={{ marginBottom: 20 }}>
-        <ArText weight="700" style={styles.inputLabel}>{label}</ArText>
-        <View style={styles.chipsWrap}>
-            {options.map((opt) => {
-                const isActive = selected === opt.label;
-                return (
-                    <Pressable 
-                      key={opt.id} 
-                      onPress={() => onSelect(opt.label)} 
-                      style={[styles.chip, isActive && styles.chipActive, error && !selected && { borderColor: COLORS.error }]}
-                    >
-                        <ArText style={[styles.chipText, isActive && { color: COLORS.bgDark }]} weight="700">{opt.label}</ArText>
-                    </Pressable>
-                )
-            })}
-        </View>
-        {error && <ArText style={styles.errorText} align="right">{error}</ArText>}
-    </View>
-);
-
 const ToggleSwitch = ({ label, value, onValueChange }) => {
-    const [width, setWidth] = useState(0);
-    const slideAnim = useRef(new Animated.Value(0)).current;
+    const [containerWidth, setContainerWidth] = useState(0);
+    const slideAnim = useRef(new Animated.Value(value ? 1 : 0)).current;
   
     useEffect(() => {
-      if (width > 0) {
         Animated.timing(slideAnim, {
-          toValue: value ? width / 2 : 0,
+          toValue: value ? 1 : 0,
           duration: 250,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: !IS_WEB,
         }).start();
-      }
-    }, [value, width]);
+    },[value]);
+
+    const PADDING = 4;
+    const buttonWidth = containerWidth > 0 ? (containerWidth - PADDING * 2) / 2 : 0;
   
     return (
       <View style={{ marginBottom: 24 }}>
         <ArText weight="700" style={styles.inputLabel}>{label}</ArText>
         <View 
           style={styles.toggleContainer} 
-          onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+          onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
         >
-          <Animated.View 
-            style={[
-              styles.toggleHighlight, 
-              { transform: [{ translateX: slideAnim }] }
-            ]} 
-          />
+          {containerWidth > 0 && (
+            <Animated.View 
+              style={[
+                styles.toggleHighlight, 
+                { 
+                  width: buttonWidth,
+                  transform:[{ 
+                    translateX: slideAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange:[0, buttonWidth]
+                    }) 
+                  }] 
+                }
+              ]} 
+            />
+          )}
           
           <Pressable style={styles.toggleBtn} onPress={() => onValueChange(false)}>
             <ArText 
@@ -188,18 +190,18 @@ const ToggleSwitch = ({ label, value, onValueChange }) => {
         </View>
       </View>
     );
-  };
+};
 
 // --- SUCCESS VIEW ---
 const SuccessView = ({ name, onClose }) => {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.spring(scaleAnim, { toValue: 1, friction: 6, useNativeDriver: !IS_WEB }).start();
-  }, []);
+  },[]);
 
   return (
     <View style={styles.successContainer}>
-      <Animated.View style={[styles.successIconBox, { transform: [{ scale: scaleAnim }] }]}>
+      <Animated.View style={[styles.successIconBox, { transform:[{ scale: scaleAnim }] }]}>
         <MaterialIcons name="check" size={48} color={COLORS.primary} />
       </Animated.View>
       <ArText weight="900" style={styles.successTitle}>تم التسجيل بنجاح!</ArText>
@@ -213,69 +215,87 @@ const SuccessView = ({ name, onClose }) => {
   );
 };
 
-// --- WILAYA PICKER BOTTOM SHEET ---
-const SelectionBottomSheet = ({ visible, onClose, data, onSelect }) => {
-    const { height } = useWindowDimensions();
-    const sheetAnim = useRef(new Animated.Value(height)).current;
+// --- REUSABLE SELECTION BOTTOM SHEET ---
+const SelectionBottomSheet = ({ visible, onClose, data, onSelect, title, searchable = true }) => {
+    const sheetAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+    const fadeAnim = useRef(new Animated.Value(0)).current;
     const [isModalVisible, setIsModalVisible] = useState(visible);
+    const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
         if (visible) {
             setIsModalVisible(true);
-            Animated.timing(sheetAnim, {
-                toValue: 0,
-                duration: 400,
-                easing: Easing.out(Easing.cubic),
-                useNativeDriver: !IS_WEB,
-            }).start();
+            setSearchQuery('');
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 300,
+                    useNativeDriver: !IS_WEB,
+                }),
+                Animated.timing(sheetAnim, {
+                    toValue: 0,
+                    duration: 400,
+                    easing: Easing.out(Easing.cubic),
+                    useNativeDriver: !IS_WEB,
+                })
+            ]).start();
         } else {
-            Animated.timing(sheetAnim, {
-                toValue: height,
-                duration: 300,
-                easing: Easing.in(Easing.cubic),
-                useNativeDriver: !IS_WEB,
-            }).start(() => {
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 0,
+                    duration: 300,
+                    useNativeDriver: !IS_WEB,
+                }),
+                Animated.timing(sheetAnim, {
+                    toValue: SCREEN_HEIGHT,
+                    duration: 300,
+                    easing: Easing.in(Easing.cubic),
+                    useNativeDriver: !IS_WEB,
+                })
+            ]).start(() => {
                 setIsModalVisible(false);
             });
         }
     }, [visible]);
 
-    if (!isModalVisible) {
-        return null;
-    }
+    const filteredData = data ? data.filter(item => {
+        const text = item.name || item.label || '';
+        return text.toLowerCase().includes(searchQuery.toLowerCase());
+    }) :[];
 
-    const handleSelect = (item) => {
-        onSelect(item);
-        onClose();
-    };
+    if (!isModalVisible) return null;
 
     return (
         <Modal transparent visible={isModalVisible} animationType="none" onRequestClose={onClose}>
-            <View style={styles.wilayaOverlay}>
-                <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.blueTintLight }]} />
+            <View style={styles.sheetOverlay}>
+                <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.overlay, opacity: fadeAnim }]} />
                 <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
                 
-                <Animated.View style={[styles.wilayaSheet, { transform: [{ translateY: sheetAnim }] }]}>
-                    <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFillObject} />
+                <Animated.View style={[styles.sheetContent, { transform: [{ translateY: sheetAnim }] }]}>
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0D1B22' }]} />
                     <View style={styles.dragHandle} />
-                    <ArText weight="700" style={{ fontSize: 18, marginBottom: 16 }}>اختر الولاية</ArText>
-                    <View style={styles.searchBar}>
-                        <MaterialIcons name="search" size={20} color={COLORS.textGray} />
-                        <TextInput 
-                          placeholder="بحث..." 
-                          placeholderTextColor={COLORS.textGray} 
-                          style={styles.searchInput} 
-                          onChangeText={() => {}} 
-                          textAlign="right" 
-                        />
-                    </View>
+                    <ArText weight="700" style={{ fontSize: 18, marginBottom: 16 }}>{title}</ArText>
+                    
+                    {searchable && (
+                        <View style={styles.searchBar}>
+                            <MaterialIcons name="search" size={20} color={COLORS.textGray} />
+                            <TextInput 
+                              placeholder="بحث..." 
+                              placeholderTextColor={COLORS.textGray} 
+                              style={[styles.searchInput, { writingDirection: 'rtl' }]} 
+                              onChangeText={setSearchQuery} 
+                              value={searchQuery}
+                              textAlign="right" 
+                            />
+                        </View>
+                    )}
+
                     <FlatList 
-                        data={data} 
-                        keyExtractor={(item) => item.id}
+                        data={filteredData} 
+                        keyExtractor={(item, index) => item.id || index.toString()}
                         renderItem={({ item }) => (
-                            <Pressable style={styles.listItem} onPress={() => handleSelect(item)}>
-                                <ArText align="right" style={{ fontSize: 16 }}>{item.name}</ArText>
+                            <Pressable style={styles.listItem} onPress={() => { onSelect(item); onClose(); }}>
+                                <ArText align="right" style={{ fontSize: 16 }}>{item.name || item.label}</ArText>
                             </Pressable>
                         )}
                         keyboardShouldPersistTaps="handled"
@@ -288,9 +308,6 @@ const SelectionBottomSheet = ({ visible, onClose, data, onSelect }) => {
 
 // --- MAIN MODAL COMPONENT ---
 export default function SignupModal({ visible, onClose }) {
-  const { width, height } = useWindowDimensions();
-  const isMobile = width < 768;
-
   const [form, setForm] = useState({ 
     name: '', 
     phone: '', 
@@ -303,22 +320,24 @@ export default function SignupModal({ visible, onClose }) {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  
+  // Modals state
   const [showWilayaModal, setShowWilayaModal] = useState(false);
+  const[showBudgetModal, setShowBudgetModal] = useState(false);
+
   const [isScrollAtTop, setIsScrollAtTop] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
-  const [isLoadingStorage, setIsLoadingStorage] = useState(true);
+  const[isLoadingStorage, setIsLoadingStorage] = useState(true);
 
-  // --- ANIMATIONS & GESTURES ---
-  const sheetY = useRef(new Animated.Value(height)).current;
+  // --- ANIMATIONS ---
+  const sheetY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
   const scrollViewRef = useRef(null);
 
   // --- PERSISTENCE FUNCTIONS ---
   const saveFormToStorage = async (formData) => {
     try {
-      const dataToSave = {
-        ...formData,
-        _timestamp: Date.now()
-      };
+      const dataToSave = { ...formData, _timestamp: Date.now() };
       await AsyncStorage.setItem(STORAGE_KEYS.SIGNUP_FORM, JSON.stringify(dataToSave));
       await AsyncStorage.setItem(STORAGE_KEYS.SIGNUP_FORM_TIMESTAMP, Date.now().toString());
     } catch (error) {
@@ -329,27 +348,21 @@ export default function SignupModal({ visible, onClose }) {
   const loadFormFromStorage = async () => {
     try {
       setIsLoadingStorage(true);
-      
-      // Check if form data is expired
       const timestamp = await AsyncStorage.getItem(STORAGE_KEYS.SIGNUP_FORM_TIMESTAMP);
       if (timestamp) {
         const savedTime = parseInt(timestamp);
         const now = Date.now();
         const daysSinceSaved = (now - savedTime) / (1000 * 60 * 60 * 24);
-        
         if (daysSinceSaved > FORM_EXPIRY_DAYS) {
-          // Clear expired data
           await AsyncStorage.removeItem(STORAGE_KEYS.SIGNUP_FORM);
           await AsyncStorage.removeItem(STORAGE_KEYS.SIGNUP_FORM_TIMESTAMP);
           setIsLoadingStorage(false);
           return;
         }
       }
-
       const savedForm = await AsyncStorage.getItem(STORAGE_KEYS.SIGNUP_FORM);
       if (savedForm) {
         const parsedForm = JSON.parse(savedForm);
-        // Remove the _timestamp field before setting state
         const { _timestamp, ...formData } = parsedForm;
         setForm(formData);
       }
@@ -369,91 +382,89 @@ export default function SignupModal({ visible, onClose }) {
     }
   };
 
-  // Load saved form when modal becomes visible
   useEffect(() => {
-    if (visible) {
-      loadFormFromStorage();
-    }
+    if (visible) loadFormFromStorage();
   }, [visible]);
 
-  // Save form whenever it changes (debounced)
   useEffect(() => {
     if (!isLoadingStorage && visible && !isSuccess) {
-      const timeoutId = setTimeout(() => {
-        saveFormToStorage(form);
-      }, 500); // Debounce for 500ms
-      
+      const timeoutId = setTimeout(() => saveFormToStorage(form), 500);
       return () => clearTimeout(timeoutId);
     }
-  }, [form, visible, isSuccess, isLoadingStorage]);
+  },[form, visible, isSuccess, isLoadingStorage]);
 
-  // --- BACK HANDLER FOR WEB ---
+  // --- BACK HANDLER ---
   useEffect(() => {
     if (IS_WEB) {
       const handlePopState = (event) => {
         if (visible) {
           event.preventDefault();
           fullClose();
-          // Push a dummy state to prevent actual back navigation
           window.history.pushState(null, '', window.location.pathname);
         }
       };
-
       if (visible) {
-        // Push a state when modal opens
         window.history.pushState(null, '', window.location.pathname);
         window.addEventListener('popstate', handlePopState);
       }
-
-      return () => {
-        window.removeEventListener('popstate', handlePopState);
-      };
+      return () => window.removeEventListener('popstate', handlePopState);
     } else {
-      // Native back button handler
       const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
         if (visible) {
           fullClose();
-          return true; // Prevent default back behavior
+          return true;
         }
         return false;
       });
-
       return () => backHandler.remove();
+    }
+  }, [visible]);
+
+  // --- ANIMATION CONTROLS ---
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: !IS_WEB,
+        }),
+        Animated.spring(sheetY, {
+          toValue: 0,
+          friction: 10,
+          tension: 80,
+          useNativeDriver: !IS_WEB,
+        }),
+      ]).start();
     }
   }, [visible]);
 
   const handleCloseAnimation = (callback) => {
     Keyboard.dismiss();
-    Animated.timing(sheetY, {
-      toValue: height,
-      duration: 300,
-      easing: Easing.in(Easing.cubic),
-      useNativeDriver: !IS_WEB,
-    }).start(callback);
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: !IS_WEB,
+      }),
+      Animated.timing(sheetY, {
+        toValue: SCREEN_HEIGHT,
+        duration: 300,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: !IS_WEB,
+      }),
+    ]).start(callback);
   };
   
   const fullClose = () => {
-    // Don't clear form data when closing - keep it saved
     handleCloseAnimation(() => {
       onClose();
-      // Only clear errors, keep form data
       setErrors({});
       setIsSuccess(false);
     });
   };
-  
-  useEffect(() => {
-    if (visible) {
-      Animated.spring(sheetY, {
-        toValue: 0,
-        friction: 10,
-        tension: 80,
-        useNativeDriver: !IS_WEB,
-      }).start();
-    }
-  }, [visible]);
 
-  // --- PanResponder for Swipe-to-Close ---
+  // --- PanResponder ---
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -484,18 +495,14 @@ export default function SignupModal({ visible, onClose }) {
         }
         setIsDragging(false);
       },
-      onPanResponderTerminate: () => {
-        setIsDragging(false);
-      },
+      onPanResponderTerminate: () => setIsDragging(false),
     })
   ).current;
 
   // --- FORM LOGIC ---
   const updateField = (key, value) => {
     setForm(prev => ({ ...prev, [key]: value }));
-    if (errors[key]) {
-      setErrors(prev => ({ ...prev, [key]: null }));
-    }
+    if (errors[key]) setErrors(prev => ({ ...prev, [key]: null }));
   };
 
   const validate = () => {
@@ -527,24 +534,20 @@ export default function SignupModal({ visible, onClose }) {
       }]);
       if (error) throw error;
       
-      // Track successful registration with Facebook Pixel
-      ReactPixel.track('Lead', {
+      // -- UPDATED PIXEL TRACKING LOGIC --
+      trackPixelEvent('Lead', {
         content_name: 'Course Registration',
         content_category: 'Signup',
-        value: 15000,
+        value: 23000,
         currency: 'DZD',
-        user_data: {
-          email: form.email,
-          phone: form.phone,
-        }
+        user_data: { email: form.email, phone: form.phone }
       });
       
-      // Also track custom event
-      ReactPixel.trackCustom('RegistrationComplete', {
+      trackPixelEvent('RegistrationComplete', {
         name: form.name,
         wilaya: form.wilaya,
         capital: form.budget
-      });
+      }, true); // true = trackCustom
       
       await clearFormStorage();
       setIsSuccess(true);
@@ -556,13 +559,12 @@ export default function SignupModal({ visible, onClose }) {
     }
   };
 
-  // Show loading indicator while restoring saved form
+  // Loading state
   if (isLoadingStorage && visible) {
     return (
       <Modal transparent visible={visible} animationType="none">
         <View style={styles.overlay}>
-          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.blueTint }]} />
+          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.overlay, opacity: fadeAnim }]} />
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.primary} />
             <ArText style={styles.loadingText}>جاري تحميل البيانات...</ArText>
@@ -575,8 +577,7 @@ export default function SignupModal({ visible, onClose }) {
   return (
     <Modal transparent visible={visible} onRequestClose={fullClose} animationType="none">
       <View style={styles.overlay}>
-        <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.blueTint }]} />
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.overlay, opacity: fadeAnim }]} />
         <Pressable style={StyleSheet.absoluteFill} onPress={fullClose} />
         
         <KeyboardAvoidingView 
@@ -584,16 +585,16 @@ export default function SignupModal({ visible, onClose }) {
           style={{ flex: 1 }} 
           pointerEvents="box-none"
         >
-          <View style={[styles.bottomSheetWrapper, !isMobile && { alignItems: 'center' }]}>
+          <View style={[styles.bottomSheetWrapper, !IS_MOBILE && styles.bottomSheetWrapperDesktop]}>
             <Animated.View 
               style={[styles.sheetContainer, getShadow(2), { 
-                width: isMobile ? '100%' : 600, 
-                height: isMobile ? height * 0.96 : 850,
-                transform:[{ translateY: sheetY }] 
+                width: IS_MOBILE ? '100%' : 600, 
+                height: IS_MOBILE ? SCREEN_HEIGHT * 0.96 : 850,
+                transform: [{ translateY: sheetY }] 
               }]}
               {...panResponder.panHandlers}
             >
-              <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0D1B22' }]} />
               <View style={styles.dragHandle} />
 
               {isSuccess ? (
@@ -609,14 +610,8 @@ export default function SignupModal({ visible, onClose }) {
                     const isTop = nativeEvent.contentOffset.y <= 2;
                     setIsScrollAtTop(isTop);
                   }}
-                  onTouchStart={() => {
-                    if (!isScrollAtTop) {
-                      setIsDragging(false);
-                    }
-                  }}
-                  onScrollBeginDrag={() => {
-                    setIsDragging(false);
-                  }}
+                  onTouchStart={() => { if (!isScrollAtTop) setIsDragging(false); }}
+                  onScrollBeginDrag={() => setIsDragging(false)}
                 >
                   <View style={styles.header}>
                       <Pressable onPress={fullClose} style={styles.closeBtn}>
@@ -637,29 +632,26 @@ export default function SignupModal({ visible, onClose }) {
                       onChangeText={(t) => updateField('name', t)} 
                       error={errors.name}
                     />
-                    <View style={{ flexDirection: 'row', gap: 12 }}>
-                        <View style={{ flex: 1 }}>
-                          <InputField 
-                            label="رقم الهاتف" 
-                            icon="phone-iphone" 
-                            placeholder="05XX..." 
-                            keyboardType="phone-pad" 
-                            value={form.phone} 
-                            onChangeText={(t) => updateField('phone', t)} 
-                            error={errors.phone} 
-                          />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <InputField 
-                            label="البريد الإلكتروني" 
-                            icon="mail-outline" 
-                            placeholder="اختياري" 
-                            keyboardType="email-address" 
-                            value={form.email} 
-                            onChangeText={(t) => updateField('email', t)} 
-                          />
-                        </View>
-                    </View>
+                    
+                    <InputField 
+                      label="رقم الهاتف" 
+                      icon="phone-iphone" 
+                      placeholder="05XX..." 
+                      keyboardType="phone-pad" 
+                      value={form.phone} 
+                      onChangeText={(t) => updateField('phone', t)} 
+                      error={errors.phone} 
+                    />
+                    
+                    <InputField 
+                      label="البريد الإلكتروني" 
+                      icon="mail-outline" 
+                      placeholder="اختياري" 
+                      keyboardType="email-address" 
+                      value={form.email} 
+                      onChangeText={(t) => updateField('email', t)} 
+                    />
+
                     <DropdownTrigger 
                       label="الولاية" 
                       placeholder="اختر ولاية الإقامة" 
@@ -676,11 +668,12 @@ export default function SignupModal({ visible, onClose }) {
                       onChangeText={(t) => updateField('businessField', t)} 
                       error={errors.businessField}
                     />
-                    <ChipsSelector 
+                    <DropdownTrigger 
                       label="رأس المال المتوفر للبدء (تقريباً)" 
-                      options={FORM_CONFIG.budgetOptions} 
-                      selected={form.budget} 
-                      onSelect={(val) => updateField('budget', val)} 
+                      placeholder="اختر رأس المال" 
+                      icon="account-balance-wallet" 
+                      value={form.budget} 
+                      onPress={() => setShowBudgetModal(true)} 
                       error={errors.budget}
                     />
                     <ToggleSwitch 
@@ -693,10 +686,10 @@ export default function SignupModal({ visible, onClose }) {
                   <Pressable 
                     onPress={handleSubmit} 
                     disabled={loading} 
-                    style={({pressed}) => [styles.submitBtn, pressed && { opacity: 0.9, transform:[{scale:0.98}] }]}
+                    style={({pressed}) =>[styles.submitBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
                   >
                       {loading ? <ActivityIndicator color={COLORS.bgDark} /> : (
-                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                        <View style={styles.submitContent}>
                             <ArText weight="900" style={styles.submitText}>إتمام التسجيل</ArText>
                             <MaterialIcons name="arrow-back" size={24} color={COLORS.bgDark} />
                         </View>
@@ -711,9 +704,20 @@ export default function SignupModal({ visible, onClose }) {
 
         <SelectionBottomSheet 
             visible={showWilayaModal} 
+            title="اختر الولاية"
             data={FORM_CONFIG.wilayas} 
+            searchable={true}
             onClose={() => setShowWilayaModal(false)} 
             onSelect={(item) => { updateField('wilaya', item.name); setShowWilayaModal(false); }}
+        />
+
+        <SelectionBottomSheet 
+            visible={showBudgetModal} 
+            title="اختر رأس المال"
+            data={FORM_CONFIG.budgetOptions} 
+            searchable={false}
+            onClose={() => setShowBudgetModal(false)} 
+            onSelect={(item) => { updateField('budget', item.label); setShowBudgetModal(false); }}
         />
       </View>
     </Modal>
@@ -731,8 +735,11 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end', 
     pointerEvents: 'box-none' 
   },
+  bottomSheetWrapperDesktop: {
+    alignItems: 'center',
+  },
   sheetContainer: {
-    backgroundColor: 'rgba(13, 27, 34, 0.85)',
+    backgroundColor: 'transparent',
     borderTopLeftRadius: 30, 
     borderTopRightRadius: 30,
     borderWidth: 1, 
@@ -778,7 +785,6 @@ const styles = StyleSheet.create({
     textAlign: 'right', 
     marginTop: 4 
   },
-  
   inputLabel: { 
     fontSize: 14, 
     color: COLORS.textWhite, 
@@ -808,7 +814,8 @@ const styles = StyleSheet.create({
     color: COLORS.textWhite, 
     fontFamily: 'Tajawal-Bold', 
     paddingHorizontal: 20, 
-    fontSize: 16 
+    fontSize: 16,
+    textAlign: 'right'
   },
   inputIcon: { 
     paddingHorizontal: 16 
@@ -819,30 +826,6 @@ const styles = StyleSheet.create({
     marginTop: 4, 
     paddingRight: 4 
   },
-
-  chipsWrap: { 
-    flexDirection: 'row-reverse', 
-    flexWrap: 'wrap', 
-    gap: 10 
-  },
-  chip: { 
-    paddingVertical: 12, 
-    paddingHorizontal: 16, 
-    borderRadius: 12, 
-    backgroundColor: 'rgba(255,255,255,0.08)', 
-    borderWidth: 1, 
-    borderColor: COLORS.border, 
-    height: 48, 
-    justifyContent: 'center' 
-  },
-  chipActive: { 
-    backgroundColor: COLORS.primary, 
-    borderColor: COLORS.primary 
-  },
-  chipText: { 
-    color: COLORS.textWhite 
-  },
-
   toggleContainer: { 
     flexDirection: 'row', 
     backgroundColor: 'rgba(255,255,255,0.08)', 
@@ -857,15 +840,17 @@ const styles = StyleSheet.create({
     top: 4, 
     left: 4,
     bottom: 4, 
-    width: '50%',
     backgroundColor: COLORS.primary, 
-    borderRadius: 10 
+    borderRadius: 10,
+    zIndex: 0,
   },
   toggleBtn: { 
     flex: 1, 
     paddingVertical: 12, 
     alignItems: 'center', 
-    borderRadius: 10 
+    justifyContent: 'center',
+    borderRadius: 10,
+    zIndex: 1,
   },
   submitBtn: { 
     backgroundColor: COLORS.primary, 
@@ -874,11 +859,15 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     justifyContent: 'center' 
   },
+  submitContent: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
   submitText: { 
     color: COLORS.bgDark, 
     fontSize: 18 
   },
-
   successContainer: { 
     flex: 1, 
     alignItems: 'center', 
@@ -917,19 +906,19 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     justifyContent: 'center' 
   },
-
-  wilayaOverlay: { 
+  sheetOverlay: { 
     flex: 1, 
     justifyContent: 'flex-end',
     backgroundColor: 'transparent',
   },
-  wilayaSheet: {
-    height: '60%',
+  sheetContent: {
+    maxHeight: '75%',
+    minHeight: 300,
     borderTopLeftRadius: 24, 
     borderTopRightRadius: 24,
     padding: 20, 
     overflow: 'hidden',
-    backgroundColor: 'rgba(13, 27, 34, 0.85)',
+    backgroundColor: '#0D1B22',
   },
   searchBar: { 
     flexDirection: 'row', 
@@ -965,3 +954,4 @@ const styles = StyleSheet.create({
     color: COLORS.textWhite,
   },
 });
+// --- END OF FILE signup.js ---

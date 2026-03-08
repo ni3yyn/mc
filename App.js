@@ -7,11 +7,13 @@ import {
   View, 
   ScrollView, 
   Pressable, 
-  useWindowDimensions, 
   Platform,
   StatusBar,
   Animated,
-  Easing
+  Easing,
+  Image,
+  Linking,
+  useWindowDimensions
 } from 'react-native';
 import * as Font from 'expo-font';
 
@@ -24,38 +26,86 @@ import SignupModal from './src/components/signup';
 import ReactPixel from 'react-facebook-pixel';
 import AdminNavigator from './src/navigation/AdminNavigator';
 
+// --- PURE WEB CSS INJECTION FOR ZERO-FOUC & SYSTEM BACKGROUND ---
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const styleId = 'rnw-responsive-overrides';
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      html, body, #root {
+        background-color: #162A36 !important;
+        height: 100%;
+        width: 100%;
+        /* PREVENT OVERSCROLL/RUBBER-BANDING ON WEB */
+        overscroll-behavior-y: none;
+        /* COMPLETELY DISABLE HORIZONTAL SCROLLING */
+        overflow-x: hidden !important; 
+        margin: 0;
+        padding: 0;
+      }
+      ::-webkit-scrollbar {
+        width: 0px;
+        background: transparent;
+        display: none;
+      }
+      @media (max-width: 768px) {
+        [data-hide-mobile="true"] { display: none !important; }
+      }
+    `;
+    document.head.append(style);
+  }
+}
+
 // Prevent splash screen from hiding automatically until fonts are loaded
 SplashScreen.preventAutoHideAsync();
 
 // --- FACEBOOK PIXEL CONFIGURATION ---
-const FACEBOOK_PIXEL_ID = 'YOUR_PIXEL_ID_HERE'; // Replace with your actual Pixel ID
+const FACEBOOK_PIXEL_ID = '4367566626898675'; 
 
-const pixelOptions = {
-  autoConfig: true,
-  debug: true, // Set to false in production
+if (Platform.OS === 'web' && FACEBOOK_PIXEL_ID && FACEBOOK_PIXEL_ID !== '4367566626898675') {
+  ReactPixel.init(FACEBOOK_PIXEL_ID, null, {
+    autoConfig: true,
+    debug: false, 
+  });
+}
+
+const trackPixelEvent = (eventName, data = {}) => {
+  if (Platform.OS === 'web' && FACEBOOK_PIXEL_ID && FACEBOOK_PIXEL_ID !== '4367566626898675') {
+    if (eventName === 'PageView') {
+      ReactPixel.pageView();
+    } else {
+      ReactPixel.trackCustom(eventName, data);
+    }
+  }
 };
 
-// Initialize Facebook Pixel
-ReactPixel.init(FACEBOOK_PIXEL_ID, null, pixelOptions);
+// --- CREDIBILITY IMAGES ---
+const HERO_IMAGES =[
+  'https://res.cloudinary.com/de122nwjr/image/upload/v1772900792/n9kivzlwncou4dvpx1om.jpg', 
+  'https://res.cloudinary.com/de122nwjr/image/upload/v1772902795/hvuy9taktj9sgrkup3ch.jpg', 
+  'https://res.cloudinary.com/de122nwjr/image/upload/v1772900792/k26tsyyf6yi8krreddgg.jpg'  
+];
 
 // --- DESIGN TOKENS ---
 const COLORS = {
   primary: '#0EB27C',       
   primaryHover: '#0A8F62',
   primaryLight: 'rgba(14, 178, 124, 0.15)',
-  bgDark: '#0D1B22',        
-  bgDarker: '#081116',      
+  
+  bgDark: '#162A36',        
+  bgDarker: '#0D1B22',      
+  
   textWhite: '#F8FAFC',
   textGray: '#94A3B8',      
-  textLight: '#CBD5E1',     
+  textLight: '#dde5f0',    
   success: '#0EB27C',       
   accentRed: '#FF3B30',     
   border: 'rgba(255, 255, 255, 0.1)',
+  whatsapp: '#25D366',
 };
 
 // --- PERFORMANCE OPTIMIZED COMPONENTS ---
-
-// 1. TranslucentView: Fast, hardware-friendly view for general UI (No lag)
 const TranslucentView = ({ style, children }) => {
   return (
     <View style={[styles.glassBase, styles.translucentBg, style]}>
@@ -64,22 +114,21 @@ const TranslucentView = ({ style, children }) => {
   );
 };
 
-// 2. BlurCard: Real BlurView used ONLY where requested (Benefits & Pricing)
-const BlurCard = ({ style, children, intensity = 40 }) => {
+const BlurCard = ({ style, children }) => {
   return (
-    <BlurView intensity={intensity} tint="dark" style={[styles.glassBase, style]}>
+    <View style={[styles.glassBase, styles.translucentBg, style]}>
       {children}
-    </BlurView>
+    </View>
   );
 };
 
-// --- BRAND BACKGROUND ---
+// --- BACKGROUND COMPONENTS ---
 const BrandBackground = () => {
   return (
     <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.bgDark, overflow: 'hidden' }]} pointerEvents="none">
       <View style={styles.redSun} />
-      <View style={[styles.redSun, { backgroundColor: 'rgba(255, 59, 48, 0.2)', transform:[{ scale: 1.8 }] }]} />
-      <View style={[styles.redSun, { backgroundColor: 'rgba(255, 59, 48, 0.1)', transform:[{ scale: 2.5 }] }]} />
+      <View style={[styles.redSun, { backgroundColor: 'rgba(255, 59, 48, 0.35)', transform:[{ scale: 1.9 }] }]} />
+      <View style={[styles.redSun, { backgroundColor: 'rgba(255, 59, 48, 0.2)', transform:[{ scale: 2.6 }] }]} />
       
       <View style={styles.greenWave1} />
       <View style={styles.greenWave2} />
@@ -89,8 +138,74 @@ const BrandBackground = () => {
   );
 };
 
+const HeroBackgroundSlider = () => {
+  const[activeIndex, setActiveIndex] = useState(0);
+  const fadeAnims = useRef(HERO_IMAGES.map(() => new Animated.Value(0))).current;
+
+  useEffect(() => {
+    fadeAnims[0].setValue(1);
+  },[fadeAnims]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const nextIndex = (activeIndex + 1) % HERO_IMAGES.length;
+
+      Animated.parallel([
+        Animated.timing(fadeAnims[activeIndex], {
+          toValue: 0,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnims[nextIndex], {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        })
+      ]).start();
+
+      setActiveIndex(nextIndex);
+    }, 6000);
+    return () => clearInterval(timer);
+  },[activeIndex, fadeAnims]);
+
+  return (
+    <View 
+      style={[
+        StyleSheet.absoluteFill, 
+        { overflow: 'hidden' },
+        Platform.OS === 'web' && {
+          WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 100%)',
+          maskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 100%)'
+        }
+      ]} 
+      pointerEvents="none"
+    >
+      {HERO_IMAGES.map((img, index) => (
+        <Animated.Image
+          key={index}
+          source={{ uri: img }}
+          style={[
+            StyleSheet.absoluteFill,
+            { opacity: fadeAnims[index], width: '100%', height: '100%' }
+          ]}
+          resizeMode="cover"
+        />
+      ))}
+      <LinearGradient
+        colors={[
+          'rgba(13, 27, 34, 0.5)',  
+          'rgba(13, 27, 34, 0.6)', 
+          Platform.OS === 'web' ? 'rgba(13, 27, 34, 0.8)' : COLORS.bgDark
+        ]}
+        style={StyleSheet.absoluteFill}
+        locations={[0, 0.6, 1]} 
+      />
+    </View>
+  );
+};
+
 // --- ANIMATION COMPONENT ---
-const FadeInUp = ({ children, delay = 0 }) => {
+const FadeInUp = ({ children, delay = 0, style }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const translateAnim = useRef(new Animated.Value(50)).current;
 
@@ -110,10 +225,10 @@ const FadeInUp = ({ children, delay = 0 }) => {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [delay]);
+  },[delay]);
 
   return (
-    <Animated.View style={{ opacity: fadeAnim, transform:[{ translateY: translateAnim }], width: '100%' }}>
+    <Animated.View style={[{ opacity: fadeAnim, transform:[{ translateY: translateAnim }], width: '100%' }, style]}>
       {children}
     </Animated.View>
   );
@@ -121,9 +236,9 @@ const FadeInUp = ({ children, delay = 0 }) => {
 
 // --- TYPEWRITER EFFECT COMPONENT ---
 const TypewriterText = ({ texts, speed = 150, delay = 2000, style }) => {
-  const [displayText, setDisplayText] = useState('');
+  const[displayText, setDisplayText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
-  const [currentTextIndex, setCurrentTextIndex] = useState(0);
+  const[currentTextIndex, setCurrentTextIndex] = useState(0);
   const cursorBlink = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -141,7 +256,7 @@ const TypewriterText = ({ texts, speed = 150, delay = 2000, style }) => {
         }),
       ])
     ).start();
-  }, []);
+  },[]);
 
   useEffect(() => {
     let timeout;
@@ -168,7 +283,7 @@ const TypewriterText = ({ texts, speed = 150, delay = 2000, style }) => {
     }
 
     return () => clearTimeout(timeout);
-  }, [displayText, isDeleting, currentTextIndex, texts, speed, delay]);
+  },[displayText, isDeleting, currentTextIndex, texts, speed, delay]);
 
   return (
     <View style={{ flexDirection: 'row-reverse', alignItems: 'center' }}>
@@ -184,6 +299,7 @@ const TypewriterText = ({ texts, speed = 150, delay = 2000, style }) => {
             marginLeft: 2,
             marginRight: 7,
             width: 2,
+            textShadowColor: 'transparent',
           }
         ]}
       >
@@ -195,10 +311,9 @@ const TypewriterText = ({ texts, speed = 150, delay = 2000, style }) => {
 
 // --- UTILITY COMPONENTS ---
 const MaxWidthContainer = ({ children, style }) => {
-  const { width } = useWindowDimensions();
   return (
-    <View style={[{ width: '100%', alignItems: 'center' }, style]}>
-      <View style={{ width: Math.min(width, 1200), paddingHorizontal: width < 768 ? 20 : 40, alignItems: 'center' }}>
+    <View style={[{ width: '100%', alignItems: 'center', justifyContent: 'center' }, style]}>
+      <View style={{ width: '100%', maxWidth: 1200, paddingHorizontal: 20, alignItems: 'center' }}>
         {children}
       </View>
     </View>
@@ -231,12 +346,11 @@ const ArText = ({ style, children, weight = '400', align = 'right', ...props }) 
 };
 
 // --- BUTTONS ---
-const PrimaryButton = ({ title, icon, onPress, fullWidth, style, pixelEvent }) => (
+const PrimaryButton = ({ title, icon, onPress, style, pixelEvent }) => (
   <Pressable 
     onPress={() => {
-      // Track button click with Facebook Pixel
       if (pixelEvent) {
-        ReactPixel.trackCustom(pixelEvent, {
+        trackPixelEvent(pixelEvent, {
           button_name: title,
           location: 'hero_section'
         });
@@ -247,7 +361,6 @@ const PrimaryButton = ({ title, icon, onPress, fullWidth, style, pixelEvent }) =
       styles.btnBase, 
       styles.btnPrimary, 
       pressed && { opacity: 0.9, transform:[{scale: 0.98}] },
-      fullWidth && { width: '100%' },
       style
     ]}
   >
@@ -258,7 +371,7 @@ const PrimaryButton = ({ title, icon, onPress, fullWidth, style, pixelEvent }) =
   </Pressable>
 );
 
-const OutlineButton = ({ title, icon, onPress, fullWidth, style, isSuccess }) => {
+const OutlineButton = ({ title, icon, onPress, style, isSuccess }) => {
   const flipAnim = useRef(new Animated.Value(0)).current;
   const bgAnim = useRef(new Animated.Value(0)).current;
 
@@ -276,33 +389,32 @@ const OutlineButton = ({ title, icon, onPress, fullWidth, style, isSuccess }) =>
       duration: 700,
       useNativeDriver: false
     }).start();
-  }, [isSuccess, title]);
+  },[isSuccess, title]);
 
   const bgColor = bgAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['rgba(255, 255, 255, 0.05)', COLORS.primaryLight]
+    outputRange:['rgba(255, 255, 255, 0.05)', COLORS.primaryLight]
   });
 
   const borderColor = bgAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['rgba(255, 255, 255, 0.2)', COLORS.primary]
+    inputRange:[0, 1],
+    outputRange:['rgba(255, 255, 255, 0.2)', COLORS.primary]
   });
 
   const rotateX = flipAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['90deg', '0deg']
+    inputRange:[0, 1],
+    outputRange:['90deg', '0deg']
   });
   
   const opacity = flipAnim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0, 0, 1]
+    inputRange:[0, 0.5, 1],
+    outputRange:[0, 0, 1]
   });
 
   return (
     <Pressable 
       onPress={() => {
-        // Track "Read More" click
-        ReactPixel.trackCustom('ReadMoreClick', {
+        trackPixelEvent('ReadMoreClick', {
           button_name: title,
           location: 'hero_section'
         });
@@ -310,7 +422,6 @@ const OutlineButton = ({ title, icon, onPress, fullWidth, style, isSuccess }) =>
       }}
       style={({pressed}) =>[
         pressed && !isSuccess && { opacity: 0.8 },
-        fullWidth && { width: '100%' },
         style
       ]}
     >
@@ -332,7 +443,7 @@ const OutlineButton = ({ title, icon, onPress, fullWidth, style, isSuccess }) =>
             justifyContent: 'space-between', 
             width: '100%',
             opacity: opacity,
-            transform: [{ rotateX: rotateX }, { perspective: 1000 }]
+            transform:[{ rotateX: rotateX }, { perspective: 1000 }]
           }}
         >
           <ArText style={[styles.btnTextOutline, isSuccess && { color: COLORS.primary }]} weight="700" align="right">
@@ -351,41 +462,139 @@ const OutlineButton = ({ title, icon, onPress, fullWidth, style, isSuccess }) =>
   );
 };
 
+// --- LOGO COMPONENT ---
+const Logo = ({ size = 'normal', showDot = true }) => {
+  const fontSize = size === 'small' ? 14 : 22;
+  return (
+    <View style={styles.logoRow}>
+      {showDot && <View style={[styles.logoDot, size === 'small' && { width: 4, height: 4, marginRight: 4 }]} />}
+      <ArText style={[styles.logoText, { fontSize }]} weight="900">كلاس</ArText>
+      <ArText style={[styles.logoText, { color: COLORS.primary, fontSize }]} weight="900"> ماستر</ArText>
+    </View>
+  );
+};
+
 // --- SECTIONS ---
 const Header = ({ setSignupVisible }) => {
-  const { width } = useWindowDimensions();
-  const isMobile = width < 768;
-
   return (
     <BlurView intensity={70} tint="dark" style={styles.header}>
       <View style={styles.headerContainer}>
          <Pressable 
            style={styles.headerBtn} 
            onPress={() => {
-             ReactPixel.trackCustom('HeaderSignupClick', {
-               location: 'header'
-             });
+             trackPixelEvent('HeaderSignupClick', { location: 'header' });
              setSignupVisible(true);
            }}
          >
            <ArText style={{color: COLORS.textWhite, fontSize: 14}} weight="700" align="center">سجل الان</ArText>
          </Pressable>
 
-         {!isMobile && (
-            <View style={styles.navLinks}>
-               <ArText style={styles.navLink} weight="700">النتائج</ArText>
-               <ArText style={styles.navLink} weight="700">المحتوى</ArText>
-               <ArText style={styles.navLink} weight="700">المسار</ArText>
-            </View>
-         )}
-
-         <View style={styles.logoRow}>
-            <View style={styles.logoDot} />
-            <ArText style={styles.logoText} weight="900">كلاس</ArText>
-            <ArText style={[styles.logoText, {color: COLORS.primary}]} weight="900"> ماستر</ArText>
-         </View>
+         <Logo />
       </View>
     </BlurView>
+  );
+};
+
+// --- FLOATING WHATSAPP BUTTON ---
+const FloatingWhatsApp = () => {
+  const[noteVisible, setNoteVisible] = useState(false);
+  const[hasInteracted, setHasInteracted] = useState(false);
+  const noteAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.25, duration: 1500, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.in(Easing.ease), useNativeDriver: true }),
+      ])
+    ).start();
+
+    const timer = setTimeout(() => {
+      if (!hasInteracted) {
+        setNoteVisible(true);
+        Animated.sequence([
+          Animated.timing(noteAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+          Animated.delay(4000),
+          Animated.timing(noteAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+        ]).start(() => setNoteVisible(false));
+      }
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [hasInteracted]);
+
+  const handlePress = () => {
+    setHasInteracted(true);
+    setNoteVisible(false);
+    Linking.openURL('https://wa.me/213557033050');
+  };
+
+  const handleMouseEnter = () => {
+    if (!hasInteracted && !noteVisible) {
+      setNoteVisible(true);
+      Animated.timing(noteAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (noteVisible && !hasInteracted) {
+      Animated.timing(noteAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => setNoteVisible(false));
+    }
+  };
+
+  return (
+    <View style={styles.whatsappContainer}>
+      {noteVisible && (
+        <Animated.View style={[styles.whatsappNote, { 
+          opacity: noteAnim, 
+          transform:[{ 
+            translateX: noteAnim.interpolate({ inputRange:[0, 1], outputRange:[-20, 0] }) 
+          }] 
+        }]}>
+          <View style={styles.whatsappNoteContent}>
+            <ArText style={styles.whatsappNoteText} weight="700">تواصل معنا عبر واتساب</ArText>
+            <View style={styles.whatsappNoteArrow} />
+          </View>
+        </Animated.View>
+      )}
+      
+      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: COLORS.whatsapp,
+              borderRadius: 30,
+              opacity: pulseAnim.interpolate({
+                inputRange:[1, 1.25],
+                outputRange: [0.6, 0]
+              }),
+              transform:[{
+                scale: pulseAnim.interpolate({
+                  inputRange:[1, 1.25],
+                  outputRange:[1, 1.7]
+                })
+              }]
+            }
+          ]}
+          pointerEvents="none"
+        />
+
+        <Animated.View style={{ transform:[{ scale: 1 }] }}>
+          <Pressable
+            onPress={handlePress}
+            onMouseEnter={Platform.OS === 'web' ? handleMouseEnter : undefined}
+            onMouseLeave={Platform.OS === 'web' ? handleMouseLeave : undefined}
+            style={({ pressed }) =>[
+              styles.whatsappButton,
+              pressed && styles.whatsappButtonPressed
+            ]}
+          >
+            <MaterialCommunityIcons name="whatsapp" size={34} color="#FFFFFF" />
+          </Pressable>
+        </Animated.View>
+      </View>
+    </View>
   );
 };
 
@@ -409,7 +618,7 @@ const TimelineItem = ({ icon, title, desc, isLast, isHighlight, delay }) => (
           <ArText style={[styles.tlTitle, isHighlight && { color: COLORS.primary }]} weight="700" align="right">
             {title}
           </ArText>
-          <ArText style={[styles.tlDesc, isHighlight && { color: COLORS.textLight }]} align="right">
+          <ArText style={styles.tlDesc} align="right">
             {desc}
           </ArText>
         </TranslucentView>
@@ -429,140 +638,54 @@ const TimelineItem = ({ icon, title, desc, isLast, isHighlight, delay }) => (
   </FadeInUp>
 );
 
-const CodeWindow = () => (
-  <TranslucentView style={styles.codeWindow}>
-    <View style={styles.codeHeader}>
-      <View style={styles.windowControls}>
-        <View style={[styles.dot, { backgroundColor: '#FF5F56' }]} />
-        <View style={[styles.dot, { backgroundColor: '#FFBD2E' }]} />
-        <View style={[styles.dot, { backgroundColor: '#27C93F' }]} />
-      </View>
-      <View style={{ flex: 1 }} />
-      <View style={{ alignItems: 'flex-end' }}>
-        <ArText style={{ fontSize: 12, color: COLORS.textWhite }} weight="700" align="right">دراسة حالة حقيقية</ArText>
-        <ArText style={{ fontSize: 10, color: COLORS.textGray }} align="right">منتج تقني مربح</ArText>
-      </View>
-      <View style={styles.folderIcon}>
-        <MaterialCommunityIcons name="package-variant-closed" size={20} color={COLORS.primary} />
-      </View>
-    </View>
-
-    <View style={{ padding: 24, gap: 12 }}>
-      {[
-        { label: 'سعر الشراء (الصين):', val: '1.20 $', color: COLORS.textWhite },
-        { label: 'تكلفة الشحن (للجزائر):', val: '0.45 $', color: COLORS.textWhite },
-        { label: 'التكلفة الإجمالية:', val: '1.65 $', color: COLORS.textWhite },
-      ].map((row, i) => (
-        <View key={i} style={styles.codeRow}>
-          <ArText style={styles.codeVal} align="left">{row.val}</ArText>
-          <ArText style={styles.codeLabel} align="right">{row.label}</ArText>
-        </View>
-      ))}
-      
-      <View style={styles.codeDivider} />
-      
-      <View style={styles.codeRow}>
-        <ArText style={[styles.codeVal, { color: COLORS.primary, fontSize: 18 }]} weight="700" align="left">6.50 $</ArText>
-        <ArText style={[styles.codeLabel, { color: COLORS.textLight }]} weight="700" align="right">سعر البيع المقترح:</ArText>
-      </View>
-
-      <View style={styles.marginBadge}>
-        <ArText style={{ color: COLORS.primary, fontSize: 13 }} weight="700" align="center">هامش ربح صافي: ~300%</ArText>
-      </View>
-    </View>
-  </TranslucentView>
-);
-
 // --- MAIN COMPONENT ---
 export default function App() {
   const { width } = useWindowDimensions();
-  const isMobile = width < 768;
+  const isDesktop = width >= 992; // Standard desktop breakpoint
+
   const [isSignupVisible, setSignupVisible] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
+  const[showAdmin, setShowAdmin] = useState(false);
   
   const scrollViewRef = useRef(null);
-  const [benefitsSectionY, setBenefitsSectionY] = useState(0);
-  const [isReadMoreClicked, setIsReadMoreClicked] = useState(false);
+  const[benefitsSectionY, setBenefitsSectionY] = useState(0);
+  const[isReadMoreClicked, setIsReadMoreClicked] = useState(false);
 
-  // Track page view on mount
   useEffect(() => {
-    ReactPixel.pageView();
-    ReactPixel.trackCustom('LandingPageView', {
+    trackPixelEvent('PageView');
+    trackPixelEvent('LandingPageView', {
       page: 'home',
       device: Platform.OS,
-      screen_width: width
+      screen_width: typeof window !== 'undefined' ? window.innerWidth : 0
     });
-  }, []);
+  },[]);
 
-  useEffect(() => {
-    async function loadIconFonts() {
-      if (Platform.OS === 'web') {
-        try {
-          await Font.loadAsync({
-            ...MaterialIcons.font,
-            ...MaterialCommunityIcons.font,
-          });
-          console.log('Icon fonts loaded successfully');
-        } catch (error) {
-          console.error('Failed to load icon fonts:', error);
-        }
-      }
-    }
-    
-    loadIconFonts();
-  }, []);
-
-  // Check for admin route on web
   useEffect(() => {
     if (Platform.OS === 'web') {
       if (window.location.pathname.startsWith('/admin')) {
         setShowAdmin(true);
-        // Track admin view
-        ReactPixel.trackCustom('AdminPageView', {
-          page: 'admin'
-        });
+        trackPixelEvent('AdminPageView', { page: 'admin' });
       }
     }
-  }, []);
-
-  // For mobile, add a secret gesture
-  const handleLogoPress = () => {
-    let pressCount = 0;
-    return () => {
-      pressCount++;
-      if (pressCount === 3) {
-        setShowAdmin(true);
-        pressCount = 0;
-      }
-      setTimeout(() => (pressCount = 0), 3000);
-    };
-  };
+  },[]);
 
   const handleReadMoreClick = () => {
     setIsReadMoreClicked(true);
     setTimeout(() => {
       if (scrollViewRef.current && benefitsSectionY > 0) {
         scrollViewRef.current.scrollTo({ y: benefitsSectionY - 80, animated: true });
-        // Track scroll to benefits
-        ReactPixel.trackCustom('ScrollToBenefits', {
-          from: 'hero'
-        });
+        trackPixelEvent('ScrollToBenefits', { from: 'hero' });
       }
     }, 600); 
     setTimeout(() => setIsReadMoreClicked(false), 3000);
   };
 
   const handleSignupOpen = () => {
-    ReactPixel.trackCustom('SignupModalOpen', {
-      location: 'main_cta'
-    });
+    trackPixelEvent('SignupModalOpen', { location: 'main_cta' });
     setSignupVisible(true);
   };
 
   const handleSignupClose = () => {
-    ReactPixel.trackCustom('SignupModalClose', {
-      location: 'main_cta'
-    });
+    trackPixelEvent('SignupModalClose', { location: 'main_cta' });
     setSignupVisible(false);
   };
 
@@ -570,6 +693,8 @@ export default function App() {
     'Tajawal-Regular': require('./src/fonts/Tajawal-Regular.ttf'),
     'Tajawal-Bold': require('./src/fonts/Tajawal-Bold.ttf'),
     'Tajawal-Black': require('./src/fonts/Tajawal-Black.ttf'),
+    ...MaterialIcons.font,
+    ...MaterialCommunityIcons.font,
   });
 
   const onLayoutRootView = useCallback(async () => {
@@ -580,7 +705,6 @@ export default function App() {
 
   if (!fontsLoaded) return null;
 
-  // Show admin panel if route matches
   if (showAdmin) {
     return <AdminNavigator />;
   }
@@ -590,126 +714,169 @@ export default function App() {
       <StatusBar barStyle="light-content" backgroundColor={COLORS.bgDark} />
       <BrandBackground />
       <Header setSignupVisible={handleSignupOpen} />
+      <FloatingWhatsApp />
 
       <ScrollView 
         ref={scrollViewRef}
         style={{ flex: 1 }} 
+        contentContainerStyle={{ flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
-        onScroll={() => {
-          // Track scroll depth (optional)
-          // You can implement scroll depth tracking here
-        }}
         scrollEventThrottle={16}
+        bounces={false}
+        overScrollMode="never"
       >
         {/* HERO SECTION */}
         <View style={styles.heroSection}>
-          <View style={{ paddingTop: 140, paddingBottom: 100, width: '100%', alignItems: 'center' }}>
+          <HeroBackgroundSlider />
+          <View style={{ paddingTop: 140, paddingBottom: 100, width: '100%', alignItems: 'center', zIndex: 2 }}>
             <MaxWidthContainer>
-              <FadeInUp>
-                <View style={{ alignItems: 'center' }}>
-                  <TranslucentView style={styles.heroBadge}>
-                    <ArText style={styles.badgeText} weight="700">دورة تدريبية عملية 100%</ArText>
-                    <MaterialIcons name="lock-outline" size={14} color={COLORS.primary} />
-                  </TranslucentView>
+              <FadeInUp style={{ width: '100%' }}>
+                <View style={{ width: '100%', alignItems: isDesktop ? 'flex-end' : 'center' }}>
+                  
+                  {/* Container to restrict width on desktop, leaving left side open for the background */}
+                  <View style={{ width: '100%', maxWidth: isDesktop ? '65%' : '100%', alignItems: isDesktop ? 'flex-end' : 'center' }}>
+                    <TranslucentView style={styles.heroBadge}>
+                      <ArText style={styles.badgeText} weight="700">دورة تدريبية عملية 100%</ArText>
+                      <MaterialIcons name="lock-outline" size={14} color={COLORS.primary} />
+                    </TranslucentView>
 
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <TypewriterText 
-                      texts={['أول شحنة', 'أول ربح', 'ألف قطعة', 'الوصول']}
-                      speed={60}
-                      delay={1500}
-                      style={[styles.heroHeading, { color: COLORS.primary, fontFamily: 'Tajawal-Black' }]}
-                    />
-                    <ArText style={styles.heroHeading} weight="900" align="center">
-                      من الصفر حتى{' '}
+                    <View style={[
+                      styles.titleWrapper,
+                      { justifyContent: isDesktop ? 'flex-start' : 'center' }
+                    ]}>
+                      <ArText style={[styles.heroHeading, { textAlign: isDesktop ? 'right' : 'center' }]} weight="900">
+                        من الصفر حتى
+                      </ArText>
+                      <TypewriterText 
+                        texts={['أول شحنة', 'أول ربح', 'ألف قطعة', 'الوصول']}
+                        speed={60}
+                        delay={1500}
+                        style={[styles.heroHeading, styles.heroHeadingDynamic, { textAlign: isDesktop ? 'right' : 'center' }]}
+                      />
+                    </View>
+
+                    <ArText style={styles.heroSub} align={isDesktop ? 'right' : 'center'}>
+                      ستتعلم المسار الكامل للإستيراد بطريقة واضحة وعملية من معرض كانتون فير بدل الاعتماد على معلومات متفرقة و غير واضحة.
                     </ArText>
-                    
+
+                    <View style={[styles.heroBtnGroup, { justifyContent: isDesktop ? 'center' : 'center' }]}>
+                      <PrimaryButton 
+                        title="سجل الآن" 
+                        icon="arrow-back" 
+                        style={{ flexGrow: 1, flexBasis: 200, maxWidth: 350 }}
+                        onPress={handleSignupOpen}
+                        pixelEvent="HeroSignupClick"
+                      />
+                      <OutlineButton 
+                        title={isReadMoreClicked ? "بالطبع" : "قراءة المزيد"} 
+                        icon={isReadMoreClicked ? "check" : "arrow-downward"} 
+                        isSuccess={isReadMoreClicked}
+                        style={{ flexGrow: 1, flexBasis: 200, maxWidth: 350 }}
+                        onPress={handleReadMoreClick}
+                      />
+                    </View>
+
+                    <FadeInUp delay={400} style={{ alignItems: isDesktop ? 'flex-end' : 'center' }}>
+                      <View style={styles.credibilityIndicator}>
+                        <MaterialIcons name="verified" size={18} color={COLORS.primary} />
+                        <ArText style={styles.credibilityText} weight="700">
+                          صور من معرض كانتون فير - الصين 🇨🇳
+                        </ArText>
+                      </View>
+                    </FadeInUp>
                   </View>
 
-                  <ArText style={styles.heroSub} align="center">
-                    ستتعلم المسار الكامل للاستيراد بطريقة واضحة وعملية بدل الاعتماد على معلومات متفرقة أو غير دقيقة.
-                  </ArText>
-
-                  <View style={[styles.heroBtnGroup, isMobile && { flexDirection: 'column', gap: 16 }]}>
-                    <PrimaryButton 
-                      title="سجل الآن" 
-                      icon="arrow-back" 
-                      style={!isMobile && { marginLeft: 16 }}
-                      fullWidth={isMobile}
-                      onPress={handleSignupOpen}
-                      pixelEvent="HeroSignupClick"
-                    />
-                    <OutlineButton 
-                      title={isReadMoreClicked ? "عندك الحق خويا" : "نزيد نقرا قبل"} 
-                      icon={isReadMoreClicked ? "check" : "arrow-downward"} 
-                      isSuccess={isReadMoreClicked}
-                      fullWidth={isMobile}
-                      onPress={handleReadMoreClick}
-                    />
-                  </View>
                 </View>
               </FadeInUp>
             </MaxWidthContainer>
           </View>
         </View>
 
-        {/* BENEFITS GRID - Uses True Blur */}
+        {/* BENEFITS GRID */}
         <View 
-          style={{ paddingVertical: 10 }}
+          style={{ paddingVertical: 80 }}
           onLayout={(event) => {
             const { y } = event.nativeEvent.layout;
             setBenefitsSectionY(y);
           }}
         >
           <MaxWidthContainer>
-            <View style={{ alignItems: 'center', marginBottom: 60 }}>
+            <View style={{ alignItems: 'center', marginBottom: 60, width: '100%' }}>
               <ArText style={styles.sectionTitle} weight="900" align="center">ماذا ستستفيد من هذا التكوين؟</ArText>
-              <ArText style={styles.sectionSub} align="center">محتوى حصري يمشيك على الطريق الصحيح</ArText>
+              <ArText style={styles.sectionSub} align="center">محتوى حصري يضعك على الطريق الصحيح</ArText>
             </View>
 
-            <View style={[styles.gridContainer, isMobile && { flexDirection: 'column', alignItems: 'stretch' }]}>
-              <FeatureCard 
-                delay={100} 
-                icon="shield-alert-outline" 
-                title="تجنب الأخطاء التي تكلف آلاف الدولارات" 
-                desc="نتحدث عن الأخطاء الشائعة التي يقع فيها المستوردون الجدد وكيف يمكن تجنبها قبل أن تستثمر أموالك." 
-              />
-              <FeatureCard 
-                delay={200} 
-                icon="storefront-outline" 
-                title="فهم عملي لمعرض كانتون فير" 
-                desc="ستتعرف على كيفية الاستفادة من أكبر معرض تجاري في الصين وكيف تبحث عن الموردين المناسبين هناك." 
-              />
-              <FeatureCard 
-                delay={300} 
-                icon="file-pdf-box" 
-                title="دليل PDF شامل وجاهز للعمل" 
-                desc="يتضمن معلومات عن الاستيراد، كانتون فير، أسواق الجملة، إضافة إلى قائمة موردين ومصانع." 
-              />
-              <FeatureCard 
-                delay={400} 
-                icon="account-group-outline" 
-                title="فرصة Networking مع رجال أعمال" 
-                desc="التعرف على أشخاص يعملون أو يريدون العمل في الاستيراد قد يفتح لك فرص شراكات وأفكار مشاريع." 
-              />
+            <View style={{
+              flexDirection: isDesktop ? 'row-reverse' : 'column', // Side-by-side on desktop
+              alignItems: 'stretch', // Ensures all cards are equal height
+              justifyContent: 'center',
+              gap: 24,
+              width: '100%',
+            }}>
+              {[
+                { 
+                  icon: "shield-alert-outline", 
+                  title: "تجنب الأخطاء المكلفة", 
+                  desc: "نتحدث عن الأخطاء الشائعة التي يقع فيها المستوردون الجدد وكيف يمكن تجنبها قبل أن تستثمر أموالك." 
+                },
+                { 
+                  icon: "storefront-outline", 
+                  title: "فهم معرض كانتون فير", 
+                  desc: "ستتعرف على كيفية الاستفادة من أكبر معرض تجاري في الصين وكيف تبحث عن الموردين المناسبين هناك." 
+                },
+                { 
+                  icon: "file-pdf-box", 
+                  title: "دليل PDF جاهز للعمل", 
+                  desc: "يتضمن معلومات عن الاستيراد، كانتون فير، أسواق الجملة، إضافة إلى قائمة موردين ومصانع." 
+                },
+                { 
+                  icon: "account-group-outline", 
+                  title: "فرصة Networking", 
+                  desc: "التعرف على أشخاص يعملون أو يريدون العمل في الاستيراد قد يفتح لك فرص شراكات وأفكار مشاريع." 
+                }
+              ].map((item, index) => (
+                <FadeInUp 
+                  key={index} 
+                  delay={100 + (index * 100)} 
+                  style={isDesktop ? { flex: 1 } : { width: '100%' }} // flex: 1 forces equal width on desktop
+                >
+                  <BlurCard style={[
+                    styles.glassCard, 
+                    { 
+                      width: '100%', 
+                      height: '100%', // Fills height to match tallest card
+                      maxWidth: '100%', // Resets the mobile constraints
+                      flexBasis: 'auto',
+                      padding: 24
+                    }
+                  ]}>
+                    <View style={[styles.iconBoxOutline, { width: 60, height: 60, borderRadius: 30, marginBottom: 20 }]}>
+                      <MaterialCommunityIcons name={item.icon} size={28} color={COLORS.textWhite} />
+                    </View>
+                    <ArText style={[styles.probTitle, { fontSize: 20 }]} weight="700" align="center">{item.title}</ArText>
+                    <ArText style={[styles.probDesc, { fontSize: 14 }]} align="center">{item.desc}</ArText>
+                  </BlurCard>
+                </FadeInUp>
+              ))}
             </View>
           </MaxWidthContainer>
         </View>
 
         {/* TIMELINE */}
-        <View style={{ backgroundColor: 'rgba(8, 17, 22, 0.4)', paddingVertical: 80, marginTop: 40 }}>
+        <View style={{ backgroundColor: 'rgba(8, 17, 22, 0.4)', paddingVertical: 80 }}>
           <MaxWidthContainer>
-            <View style={{ alignItems: 'center', marginBottom: 60 }}>
+            <View style={{ alignItems: 'center', marginBottom: 60, width: '100%' }}>
               <ArText style={styles.eyebrow} weight="700" align="center">المسار الكامل</ArText>
               <ArText style={styles.sectionTitle} weight="900" align="center">خريطة طريق واضحة للبدء بثقة</ArText>
               <ArText style={styles.sectionSub} align="center">خطوات عملية من شاشة حاسوبك حتى وصول بضاعتك للجزائر</ArText>
             </View>
 
-            <View style={{ width: '100%', maxWidth: 800 }}>
+            <View style={{ width: '100%', maxWidth: 800, alignSelf: 'center' }}>
               <TimelineItem 
                 delay={100}
                 icon="map-search-outline" 
-                title="تفهم الخطوات الحقيقية للاستيراد من الصين" 
-                desc="ستتعلم المسار الكامل للاستيراد بطريقة واضحة وعملية بدل الاعتماد على معلومات متفرقة أو غير دقيقة." 
+                title="فهم الخطوات الحقيقية للاستيراد من الصين" 
+                desc="ستتعلم المسار الكامل للاستيراد بطريقة واضحة وعملية من معرض كانتون فير بدل الاعتماد على معلومات متفرقة غير عملية." 
               />
               <TimelineItem 
                 delay={200}
@@ -735,81 +902,118 @@ export default function App() {
           </MaxWidthContainer>
         </View>
 
-        {/* OUTCOMES & CODE WINDOW */}
-        <View style={{ paddingVertical: 80, borderTopWidth: 1, borderTopColor: COLORS.border }}>
-          <MaxWidthContainer>
-            <View style={[styles.splitSection, isMobile && { flexDirection: 'column' }]}>
-              <View style={{ flex: 1, paddingLeft: isMobile ? 0 : 40, marginBottom: isMobile ? 40 : 0 }}>
-                <FadeInUp delay={200}>
-                  <ArText style={styles.sectionTitle} weight="900" align="right">
-                    نتيجة هذا <Text style={{ color: COLORS.primary }}>التكوين</Text>
-                  </ArText>
-                  <ArText style={[styles.sectionSub, { marginBottom: 32 }]} align="right">
-                    بناء أساس متين لمشروع تجاري مربح ومستدام، مدعوم بخطوات مجربة وحسابات دقيقة.
-                  </ArText>
-
-                  <View style={{ gap: 16 }}>
-                    {[
-                      "مسار كامل وواضح للاستيراد من الصين.",
-                      "أسرار تجنب الأخطاء المكلفة مادياً.",
-                      "مهارات التفاوض وتحديد الكميات باحترافية.",
-                    ].map((txt, i) => (
-                      <View key={i} style={styles.checkRow}>
-                        <ArText style={styles.checkText} align="right">{txt}</ArText>
-                        <View style={styles.checkIcon}>
-                          <MaterialIcons name="check" size={14} color={COLORS.bgDark} />
-                        </View>
-                      </View>
-                    ))}
-                    <View style={styles.checkRow}>
-                      <ArText style={[styles.checkText, { color: COLORS.textWhite }]} weight="700" align="right">قائمة موردين ومصانع جاهزة للعمل مع دليل PDF.</ArText>
-                      <View style={[styles.checkIcon, { backgroundColor: COLORS.primary }]}>
-                        <MaterialIcons name="check" size={14} color={COLORS.bgDark} />
-                      </View>
-                    </View>
-                  </View>
-                </FadeInUp>
-              </View>
-
-              <View style={{ flex: 1, width: '100%', minHeight: 300 }}>
-                <FadeInUp delay={400}>
-                  <CodeWindow />
-                </FadeInUp>
-              </View>
-            </View>
-          </MaxWidthContainer>
+        {/* OUTCOMES SECTION */}
+<View style={{ paddingVertical: 80, borderTopWidth: 1, borderTopColor: COLORS.border }}>
+  <MaxWidthContainer>
+    <FadeInUp delay={200} style={{ width: '100%' }}>
+      <View style={{ 
+        flexDirection: isDesktop ? 'row-reverse' : 'column', 
+        alignItems: 'center', 
+        justifyContent: 'space-between',
+        width: '100%', 
+        gap: isDesktop ? 60 : 0 // <--- REDUCED FROM 30 TO 15 FOR TIGHTER MOBILE LOOK
+      }}>
+        
+        {/* Right Side: Text Context */}
+        <View style={{ flex: 1, alignItems: isDesktop ? 'flex-end' : 'center', width: '100%' }}>
+          <ArText style={styles.sectionTitle} weight="900" align={isDesktop ? "right" : "center"}>
+            نتيجة هذا <Text style={{ color: COLORS.primary }}>التكوين</Text>
+          </ArText>
+          <ArText 
+            style={[styles.sectionSub, { marginBottom: isDesktop ? 0 : 10 }]} // <--- REDUCED FROM 20 TO 10
+            align={isDesktop ? "right" : "center"}
+          >
+            بناء أساس متين لمشروع تجاري مربح ومستدام.
+          </ArText>
         </View>
 
-        {/* CTA SECTION - Uses True Blur */}
-        <View style={{ paddingVertical: 80 }}>
-          <MaxWidthContainer>
-            <FadeInUp>
-              <View style={{ width: '100%', maxWidth: 700, alignItems: 'center' }}>
-                <View style={styles.iconBoxOutline}>
-                   <MaterialIcons name="rocket-launch" size={40} color={COLORS.textWhite} />
+        {/* Left Side: Outcome Cards */}
+        <View style={{ flex: 1.2, width: '100%', gap: 12 }}> {/* Reduced gap between pills slightly */}
+          {[
+            "مسار كامل وواضح للاستيراد من الصين.",
+            "أسرار تجنب الأخطاء المكلفة مادياً.",
+            "مهارات التفاوض وتحديد الكميات باحترافية.",
+          ].map((txt, i) => (
+            <BlurCard key={i} style={{ padding: 18, borderWidth: 0, backgroundColor: 'rgba(255, 255, 255, 0.02)' }}>
+              <View style={styles.checkRow}>
+                <ArText style={styles.checkText} align="right">{txt}</ArText>
+                <View style={styles.checkIcon}>
+                  <MaterialIcons name="check" size={14} color={COLORS.bgDark} />
                 </View>
-                <ArText style={[styles.ctaTitle, {marginTop: 24}]} weight="900" align="center">مستعد لتبدأ رحلتك في الاستيراد؟</ArText>
-                <ArText style={styles.ctaSub} align="center">لا تفوت فرصة بناء مشروعك بالطريقة الصحيحة، احجز مقعدك وانضم للناجحين.</ArText>
+              </View>
+            </BlurCard>
+          ))}
 
-                <BlurCard style={styles.pricingCard} intensity={40}>
-                  <View style={[styles.priceRow, isMobile && { flexDirection: 'column-reverse', gap: 20 }]}>
-                    <PrimaryButton 
-                      title="ابدأ التكوين الآن" 
-                      style={{ paddingHorizontal: 40 }}
-                      fullWidth={isMobile}
-                      onPress={handleSignupOpen}
-                      pixelEvent="CTASignupClick"
-                    />
-                    <View style={styles.priceInfo}>
-                      <ArText style={styles.priceLabel} align="right">سعر التكوين</ArText>
-                      <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-end' }}>
-                        <ArText style={styles.priceNum} weight="700">15,000</ArText>
-                        <ArText style={styles.priceCurr} weight="700">د.ج</ArText>
+          <BlurCard style={{ 
+            padding: 18, 
+            borderColor: COLORS.primary, 
+            backgroundColor: 'rgba(14, 178, 124, 0.05)',
+            borderWidth: 1 
+          }}>
+            <View style={styles.checkRow}>
+              <ArText style={[styles.checkText, { color: COLORS.textWhite }]} weight="700" align="right">
+                قائمة موردين ومصانع جاهزة للعمل مع دليل PDF.
+              </ArText>
+              <View style={[styles.checkIcon, { backgroundColor: COLORS.primary }]}>
+                <MaterialIcons name="check" size={14} color={COLORS.bgDark} />
+              </View>
+            </View>
+          </BlurCard>
+        </View>
+
+      </View>
+    </FadeInUp>
+  </MaxWidthContainer>
+</View>
+
+        {/* CTA SECTION (Responsive Split) */}
+        <View style={{ paddingVertical: 100, alignSelf: 'center', width: '100%' }}>
+          <MaxWidthContainer>
+            <FadeInUp style={{ width: '100%' }}>
+              <View style={{ 
+                flexDirection: isDesktop ? 'row-reverse' : 'column', 
+                alignItems: 'center', 
+                width: '100%', 
+                gap: isDesktop ? 60 : 40 
+              }}>
+                
+                {/* Right Side: Copy */}
+                <View style={{ flex: 1, alignItems: isDesktop ? 'flex-end' : 'center', width: '100%' }}>
+                  <View style={[styles.iconBoxOutline, isDesktop && { alignSelf: 'flex-end' }]}>
+                     <MaterialIcons name="rocket-launch" size={40} color={COLORS.textWhite} />
+                  </View>
+                  <ArText style={[styles.ctaTitle, {marginTop: 24}]} weight="900" align={isDesktop ? "right" : "center"}>
+                    مستعد لتبدأ رحلتك في الاستيراد؟
+                  </ArText>
+                  <ArText style={styles.ctaSub} align={isDesktop ? "right" : "center"}>
+                    لا تفوت فرصة بناء مشروعك بالطريقة الصحيحة، احجز مقعدك وانضم للناجحين.
+                  </ArText>
+                </View>
+
+                {/* Left Side: Pricing Card */}
+                <View style={{ flex: 1.2, width: '100%', maxWidth: 600 }}>
+                  <BlurCard style={styles.pricingCard}>
+                    <View style={styles.priceRow}>
+                      <View style={{ flexGrow: 1, flexBasis: 200 }}>
+                        <PrimaryButton 
+                          title="سجل في الدورة الآن" 
+                          style={{ paddingHorizontal: 40 }}
+                          onPress={handleSignupOpen}
+                          pixelEvent="CTASignupClick"
+                        />
+                      </View>
+                      <View style={styles.priceInfo}>
+                        <ArText style={styles.priceLabel} align="right">سعر التكوين</ArText>
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-end', justifyContent: 'center' }}>
+                          <ArText style={styles.priceNum} weight="700">23,000</ArText>
+                          <ArText style={styles.priceCurr} weight="700">د.ج</ArText>
+                        </View>
                       </View>
                     </View>
-                  </View>
-                  <ArText style={styles.secureText} align="center">دفع آمن بوسائل الدفع المحلية (BaridiMob, CCP) متاح أيضاً</ArText>
-                </BlurCard>
+                    <ArText style={styles.secureText} align="center">دفع آمن بوسائل الدفع المحلية (BaridiMob, CCP)</ArText>
+                  </BlurCard>
+                </View>
+
               </View>
             </FadeInUp>
           </MaxWidthContainer>
@@ -818,24 +1022,17 @@ export default function App() {
         {/* FOOTER */}
         <View style={styles.footer}>
           <MaxWidthContainer>
-            <View style={[styles.footerContent, isMobile && { flexDirection: 'column-reverse', gap: 20 }]}>
-              <View style={styles.iconTxt}>
-                <ArText style={styles.copy}>© 2024 جميع الحقوق محفوظة</ArText>
-                <ArText style={styles.copy}> | </ArText>
-                <ArText style={[styles.logoText, { fontSize: 14 }]} weight="700">
-                  إستيراد <Text style={{ color: COLORS.primary }}>برو</Text>
-                </ArText>
+            <View style={styles.footerContent}>
+              
+              <Logo />
+              
+              <View style={styles.footerContactRow}>
+                 <ArText style={styles.footerLink}>abdelkaderlahouadji@gmail.com</ArText>
+                 <MaterialIcons name="mail-outline" size={18} color={COLORS.textGray} />
               </View>
-              <View style={{ flexDirection: 'row-reverse', gap: 24 }}>
-                 <View style={styles.iconTxt}>
-                    <ArText style={styles.footerLink}>contact@importpro.dz</ArText>
-                    <MaterialIcons name="mail-outline" size={16} color={COLORS.textGray} />
-                 </View>
-                 <View style={styles.iconTxt}>
-                    <ArText style={styles.footerLink}>الدعم الفني</ArText>
-                    <MaterialIcons name="support-agent" size={16} color={COLORS.textGray} />
-                 </View>
-              </View>
+
+              <ArText style={styles.copy}>© 2026 جميع الحقوق محفوظة</ArText>
+
             </View>
           </MaxWidthContainer>
         </View>
@@ -844,20 +1041,23 @@ export default function App() {
       <SignupModal 
         visible={isSignupVisible} 
         onClose={handleSignupClose}
-        onOpen={() => ReactPixel.trackCustom('SignupModalViewed')}
+        onOpen={() => {
+          trackPixelEvent('SignupModalViewed');
+        }}
       />
     </View>
   );
 }
 
-// --- STYLES --- (keep your existing styles)
+// --- STYLES ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.bgDark,
+    overflow: 'hidden', 
   },
   glassBase: {
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
     borderWidth: 1,
     borderRadius: 20,
     overflow: 'hidden',
@@ -867,8 +1067,8 @@ const styles = StyleSheet.create({
   },
   redSun: {
     position: 'absolute',
-    top: 100,
-    right: '15%',
+    top: 120,
+    right: '17%',
     width: 50,
     height: 50,
     borderRadius: 45,
@@ -881,7 +1081,7 @@ const styles = StyleSheet.create({
     width: '120%',
     height: 450,
     backgroundColor: COLORS.primary,
-    opacity: 0.15,
+    opacity: 0.2,
     transform:[{ rotate: '-12deg' }],
     borderBottomRightRadius: 600,
     borderBottomLeftRadius: 200,
@@ -893,7 +1093,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 250,
     backgroundColor: COLORS.primary,
-    opacity: 0.1,
+    opacity: 0.2,
     transform:[{ rotate: '-35deg' }],
     borderTopLeftRadius: 500,
     borderBottomLeftRadius: 500,
@@ -905,7 +1105,7 @@ const styles = StyleSheet.create({
     width: '120%',
     height: 350,
     backgroundColor: COLORS.primary,
-    opacity: 0.15,
+    opacity: 0.2,
     transform:[{ rotate: '15deg' }],
     borderTopRightRadius: 600,
     borderTopLeftRadius: 300,
@@ -917,7 +1117,7 @@ const styles = StyleSheet.create({
     width: 400,
     height: 400,
     borderWidth: 1,
-    borderColor: 'rgba(14, 178, 124, 0.05)',
+    borderColor: 'rgba(14, 178, 124, 0.2)',
     borderRadius: 200,
     transform:[{ scale: 2 }, { translateX: 100 }, { translateY: 100 }],
   },
@@ -958,14 +1158,6 @@ const styles = StyleSheet.create({
     marginRight: 6,
     marginTop: -10,
   },
-  navLinks: {
-    flexDirection: 'row',
-    gap: 30,
-  },
-  navLink: {
-    color: COLORS.textLight,
-    fontSize: 16,
-  },
   headerBtn: {
     backgroundColor: COLORS.primary,
     paddingVertical: 8,
@@ -975,6 +1167,7 @@ const styles = StyleSheet.create({
   heroSection: {
     width: '100%',
     minHeight: 800,
+    position: 'relative',
   },
   heroBadge: {
     flexDirection: 'row',
@@ -983,29 +1176,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 24,
     borderRadius: 30,
+    backgroundColor: 'rgba(13, 27, 34, 0.6)', 
   },
   badgeText: {
     color: COLORS.primary,
     fontSize: 14,
     marginRight: 8,
   },
+  titleWrapper: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    columnGap: 12,
+    width: '100%',
+  },
   heroHeading: {
-    fontSize: 48,
-    lineHeight: 64,
+    fontSize: Platform.OS === 'web' ? 'clamp(48px, 5vw, 48px)' : 90,
+    lineHeight: Platform.OS === 'web' ? 'clamp(35px, 6vw, 64px)' : 48,
     marginBottom: 24,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
+  },
+  heroHeadingDynamic: {
+    color: COLORS.primary,
+    fontFamily: 'Tajawal-Black',
   },
   heroSub: {
-    fontSize: 18,
+    fontSize: Platform.OS === 'web' ? 'clamp(19px, 3vw, 25px)' : 16,
     color: COLORS.textLight,
     maxWidth: 680,
     marginBottom: 40,
-    lineHeight: 30,
+    lineHeight: Platform.OS === 'web' ? 'clamp(26px, 4vw, 30px)' : 26,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 5,
   },
   heroBtnGroup: {
     flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
     width: '100%',
+    gap: 16,
+    marginBottom: 20,
+  },
+  credibilityIndicator: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 60,
+    marginTop: 28,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(14, 178, 124, 0.15)',
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(14, 178, 124, 0.4)',
+  },
+  credibilityText: {
+    fontSize: 14,
+    color: COLORS.textWhite,
+    marginRight: 8,
+    textAlign: 'center',
   },
   btnBase: {
     flexDirection: 'row-reverse',
@@ -1039,34 +1269,37 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   sectionTitle: {
-    fontSize: 36,
+    fontSize: Platform.OS === 'web' ? 'clamp(28px, 4vw, 36px)' : 28,
     marginBottom: 16,
-    lineHeight: 50,
+    lineHeight: Platform.OS === 'web' ? 'clamp(40px, 5vw, 50px)' : 40,
   },
   sectionSub: {
     fontSize: 18,
-    color: COLORS.textGray,
+    color: COLORS.textLight, 
     maxWidth: 600,
     lineHeight: 28,
   },
   gridContainer: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse', 
     flexWrap: 'wrap',
     gap: 24,
-    justifyContent: 'center',
+    justifyContent: 'center', 
+    alignItems: 'stretch',
     width: '100%',
   },
   glassCard: {
     padding: 32,
-    flex: 1,
-    minWidth: 280,
-    alignItems: 'center',
+    flexGrow: 1,
+    flexBasis: 280,
+    maxWidth: 400,
+    alignSelf: 'center',
   },
   iconBoxOutline: {
     width: 80,
     height: 80,
     borderRadius: 40,
     borderWidth: 2,
+    alignSelf: 'center',
     borderColor: COLORS.textWhite,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1078,7 +1311,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   probDesc: {
-    color: COLORS.textGray,
+    color: COLORS.textLight, 
     fontSize: 15,
     lineHeight: 24,
   },
@@ -1138,13 +1371,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   tlDesc: {
-    color: COLORS.textGray,
+    color: COLORS.textLight, 
     fontSize: 15,
     lineHeight: 26,
-  },
-  splitSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   checkRow: {
     flexDirection: 'row',
@@ -1167,69 +1396,8 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     lineHeight: 28,
   },
-  codeWindow: {
-    borderRadius: 16,
-  },
-  codeHeader: {
-    height: 50,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  windowControls: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  dot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  folderIcon: {
-    width: 36,
-    height: 36,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 16,
-  },
-  codeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  codeLabel: {
-    color: COLORS.textGray,
-    fontSize: 14,
-  },
-  codeVal: {
-    color: COLORS.textWhite,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 14,
-  },
-  codeDivider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 8,
-  },
-  marginBadge: {
-    backgroundColor: 'rgba(14, 178, 124, 0.15)',
-    borderColor: 'rgba(14, 178, 124, 0.4)',
-    borderWidth: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  cursor: {
-    marginLeft: 2,
-    marginRight: 2,
-  },
   ctaTitle: {
-    fontSize: 42,
+    fontSize: Platform.OS === 'web' ? 'clamp(32px, 5vw, 42px)' : 36,
     marginBottom: 16,
   },
   ctaSub: {
@@ -1239,16 +1407,22 @@ const styles = StyleSheet.create({
   },
   pricingCard: {
     width: '100%',
-    padding: 40,
+    padding: Platform.OS === 'web' ? 'clamp(24px, 4vw, 40px)' : 30,
     borderRadius: 24,
   },
   priceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap-reverse',
+    justifyContent: 'center',
     alignItems: 'center',
+    gap: 30,
+    width: '100%',
   },
   priceInfo: {
-    alignItems: 'flex-end',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexGrow: 1,
+    flexBasis: 200,
   },
   priceLabel: {
     color: COLORS.textGray,
@@ -1274,25 +1448,83 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bgDarker,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    paddingVertical: 40,
+    paddingVertical: 50,
   },
   footerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
     width: '100%',
   },
-  iconTxt: {
+  footerContactRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
+    marginTop: 4,
+    marginBottom: 4,
   },
   footerLink: {
     color: COLORS.textGray,
-    fontSize: 14,
+    fontSize: 15,
   },
   copy: {
     color: COLORS.textGray,
     fontSize: 14,
-  }
+  },
+  whatsappContainer: {
+    position: 'absolute',
+    bottom: Platform.OS === 'web' ? 'clamp(20px, 4vw, 30px)' : 24,
+    right: Platform.OS === 'web' ? 'clamp(20px, 4vw, 30px)' : 24,
+    zIndex: 1000,
+    alignItems: 'flex-end',
+  },
+  whatsappButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: COLORS.whatsapp,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: COLORS.whatsapp,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  whatsappButtonPressed: {
+    transform:[{ scale: 0.92 }],
+  },
+  whatsappNote: {
+    position: 'absolute',
+    bottom: 74,
+    right: 0,
+    marginBottom: 10,
+  },
+  whatsappNoteContent: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    backgroundColor: 'rgba(13, 27, 34, 0.95)',
+    borderWidth: 1,
+    borderColor: COLORS.whatsapp,
+  },
+  whatsappNoteText: {
+    color: COLORS.textWhite,
+    fontSize: 15,
+  },
+  whatsappNoteArrow: {
+    position: 'absolute',
+    bottom: -6,
+    right: 24,
+    width: 12,
+    height: 12,
+    backgroundColor: 'rgba(13, 27, 34, 0.95)',
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: COLORS.whatsapp,
+    transform:[{ rotate: '45deg' }],
+  },
 });
+// --- END OF FILE App.js ---

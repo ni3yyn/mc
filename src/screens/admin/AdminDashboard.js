@@ -14,6 +14,10 @@ import {
   TextInput,
   Platform,
   Linking,
+  Animated, // <--- Add this
+  Easing,   // <--- Add this
+  LayoutAnimation, // <--- Add this
+  UIManager,       // <--- Add this
 } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -24,6 +28,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as XLSX from 'xlsx';
 import { useFonts } from 'expo-font';
+
 
 // ==================== CONSTANTS ====================
 const COLORS = {
@@ -73,6 +78,49 @@ const STATUS_CONFIG = {
     nextStatus: null
   },
 };
+
+// ==================== WEB COMPATIBILITY FIXES ====================
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const styleId = 'rnw-responsive-overrides';
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      /* 1. MATCH BACKGROUND TO APP THEME (Fixed the blue color) */
+      html, body, #root {
+        background-color: ${COLORS.bgDarker} !important; 
+        min-height: 100%;
+        height: 100%;
+      }
+
+      /* 2. PREVENT SCROLL BOUNCE / RUBBER BANDING */
+      body {
+        overscroll-behavior-y: none;
+      }
+
+      /* 3. ENSURE ROOT DIV FILLS HEIGHT */
+      #root {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+      }
+      
+      /* 4. CUSTOM SCROLLBAR (Optional - matches theme) */
+      ::-webkit-scrollbar {
+        width: 8px;
+        background-color: ${COLORS.bgDarker};
+      }
+      ::-webkit-scrollbar-thumb {
+        background-color: #1E293B;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background-color: ${COLORS.primary};
+      }
+    `;
+    document.head.append(style);
+  }
+}
 
 // ==================== CUSTOM TEXT COMPONENT ====================
 const ArText = ({ style, children, weight = '400', align = 'right', ...props }) => {
@@ -218,6 +266,36 @@ export default function AdminDashboard() {
     converted: 0,
     lost: 0,
   });
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  const slideAnim = React.useRef(new Animated.Value(0)).current;
+
+  // Trigger animation when selection changes
+  useEffect(() => {
+    if (selectedIds.size > 0) {
+      // Slide Up
+      Animated.timing(slideAnim, {
+        toValue: 1,
+        duration: 300,
+        easing: Easing.out(Easing.back(1.5)), // Bouncy effect
+        useNativeDriver: true,
+      }).start();
+    } else {
+      // Slide Down
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 200,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [selectedIds.size]);
+
+  // Interpolate value to Y position (starts 150px down, moves to 0)
+  const translateY = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [150, 0],
+  });
 
   // ==================== DATA FETCHING ====================
   const fetchRegistrations = async () => {
@@ -321,68 +399,100 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteRegistration = (id) => {
-    Alert.alert(
-      'تأكيد الحذف',
-      'هل أنت متأكد من حذف هذا التسجيل؟',
-      [
-        { text: 'إلغاء', style: 'cancel' },
-        {
-          text: 'حذف',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('registrations')
-                .delete()
-                .eq('id', id);
+    // Define the delete logic separately to reuse it
+    const executeDelete = async () => {
+      try {
+        const { error } = await supabase
+          .from('registrations')
+          .delete()
+          .eq('id', id);
 
-              if (error) throw error;
+        if (error) throw error;
 
-              Alert.alert('نجاح', 'تم حذف التسجيل بنجاح');
-              fetchRegistrations();
-            } catch (error) {
-              console.error('Error deleting registration:', error);
-              Alert.alert('خطأ', 'فشل في حذف التسجيل');
-            }
+        // Show success message compatible with platform
+        if (Platform.OS === 'web') {
+          window.alert('تم حذف التسجيل بنجاح');
+        } else {
+          Alert.alert('نجاح', 'تم حذف التسجيل بنجاح');
+        }
+        fetchRegistrations();
+      } catch (error) {
+        console.error('Error deleting registration:', error);
+        // Show error message compatible with platform
+        if (Platform.OS === 'web') {
+          window.alert('فشل في حذف التسجيل');
+        } else {
+          Alert.alert('خطأ', 'فشل في حذف التسجيل');
+        }
+      }
+    };
+
+    // Use native browser confirm for Web, standard Alert for Mobile
+    if (Platform.OS === 'web') {
+      if (window.confirm('هل أنت متأكد من حذف هذا التسجيل؟')) {
+        executeDelete();
+      }
+    } else {
+      Alert.alert(
+        'تأكيد الحذف',
+        'هل أنت متأكد من حذف هذا التسجيل؟',
+        [
+          { text: 'إلغاء', style: 'cancel' },
+          {
+            text: 'حذف',
+            style: 'destructive',
+            onPress: executeDelete,
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const handleBulkAction = async (action) => {
     if (filteredRegistrations.length === 0) return;
 
-    Alert.alert(
-      'تأكيد الإجراء',
-      `هل أنت متأكد من تغيير حالة ${filteredRegistrations.length} تسجيل إلى "${STATUS_CONFIG[action]?.label}"؟`,
-      [
-        { text: 'إلغاء', style: 'cancel' },
-        {
-          text: 'تطبيق',
-          onPress: async () => {
-            try {
-              const ids = filteredRegistrations.map(r => r.id);
-              const { error } = await supabase
-                .from('registrations')
-                .update({ 
-                  status: action,
-                  updated_at: new Date().toISOString(),
-                })
-                .in('id', ids);
+    const message = `هل أنت متأكد من تغيير حالة ${filteredRegistrations.length} تسجيل إلى "${STATUS_CONFIG[action]?.label}"؟`;
 
-              if (error) throw error;
+    const executeBulkUpdate = async () => {
+      try {
+        const ids = filteredRegistrations.map(r => r.id);
+        const { error } = await supabase
+          .from('registrations')
+          .update({ 
+            status: action,
+            updated_at: new Date().toISOString(),
+          })
+          .in('id', ids);
 
-              Alert.alert('نجاح', `تم تحديث ${ids.length} تسجيل`);
-              fetchRegistrations();
-            } catch (error) {
-              console.error('Error bulk updating:', error);
-              Alert.alert('خطأ', 'فشل في تطبيق الإجراء');
-            }
-          },
-        },
-      ]
-    );
+        if (error) throw error;
+
+        const successMsg = `تم تحديث ${ids.length} تسجيل`;
+        if (Platform.OS === 'web') window.alert(successMsg);
+        else Alert.alert('نجاح', successMsg);
+        
+        fetchRegistrations();
+      } catch (error) {
+        console.error('Error bulk updating:', error);
+        const errorMsg = 'فشل في تطبيق الإجراء';
+        if (Platform.OS === 'web') window.alert(errorMsg);
+        else Alert.alert('خطأ', errorMsg);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) {
+        executeBulkUpdate();
+      }
+    } else {
+      Alert.alert(
+        'تأكيد الإجراء',
+        message,
+        [
+          { text: 'إلغاء', style: 'cancel' },
+          { text: 'تطبيق', onPress: executeBulkUpdate },
+        ]
+      );
+    }
   };
 
   // ==================== EXPORT FUNCTIONS ====================
@@ -443,6 +553,153 @@ export default function AdminDashboard() {
       </View>
     );
   }
+
+  const toggleSelection = (id) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  };
+  
+  const handleSelectAll = () => {
+    if (selectedIds.size === filteredRegistrations.length) {
+      setSelectedIds(new Set()); // Deselect all
+    } else {
+      const allIds = filteredRegistrations.map(r => r.id);
+      setSelectedIds(new Set(allIds));
+    }
+  };
+  
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+  
+    const count = selectedIds.size;
+    const message = `هل أنت متأكد من حذف ${count} تسجيلات محددة؟`;
+  
+    const executeDelete = async () => {
+      try {
+        const idsToDelete = Array.from(selectedIds);
+        const { error } = await supabase
+          .from('registrations')
+          .delete()
+          .in('id', idsToDelete);
+  
+        if (error) throw error;
+  
+        if (Platform.OS === 'web') {
+          window.alert('تم حذف التسجيلات بنجاح');
+        } else {
+          Alert.alert('نجاح', 'تم حذف التسجيلات بنجاح');
+        }
+        
+        setSelectedIds(new Set()); // Clear selection
+        fetchRegistrations();
+      } catch (error) {
+        console.error('Error bulk deleting:', error);
+        if (Platform.OS === 'web') {
+          window.alert('فشل في حذف التسجيلات');
+        } else {
+          Alert.alert('خطأ', 'فشل في حذف التسجيلات');
+        }
+      }
+    };
+  
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) executeDelete();
+    } else {
+      Alert.alert('تأكيد الحذف', message, [
+        { text: 'إلغاء', style: 'cancel' },
+        { text: 'حذف', style: 'destructive', onPress: executeDelete },
+      ]);
+    }
+  };
+  
+  // Function to Update Status for Selected Items
+  const handleBulkStatusChange = (newStatus) => {
+    if (selectedIds.size === 0) return;
+  
+    const count = selectedIds.size;
+    const statusLabel = STATUS_CONFIG[newStatus]?.label;
+    const message = `هل أنت متأكد من تغيير حالة ${count} تسجيلات إلى "${statusLabel}"؟`;
+  
+    const executeUpdate = async () => {
+      try {
+        const idsToUpdate = Array.from(selectedIds);
+        const { error } = await supabase
+          .from('registrations')
+          .update({ 
+            status: newStatus,
+            updated_at: new Date().toISOString(),
+          })
+          .in('id', idsToUpdate);
+  
+        if (error) throw error;
+  
+        if (Platform.OS === 'web') {
+          window.alert('تم تحديث الحالة بنجاح');
+        } else {
+          Alert.alert('نجاح', 'تم تحديث الحالة بنجاح');
+        }
+  
+        setSelectedIds(new Set()); // Clear selection
+        fetchRegistrations();
+      } catch (error) {
+        console.error('Error bulk updating:', error);
+        if (Platform.OS === 'web') {
+          window.alert('فشل في تحديث الحالة');
+        } else {
+          Alert.alert('خطأ', 'فشل في تحديث الحالة');
+        }
+      }
+    };
+  
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) executeUpdate();
+    } else {
+      Alert.alert('تأكيد التحديث', message, [
+        { text: 'إلغاء', style: 'cancel' },
+        { text: 'تحديث', onPress: executeUpdate },
+      ]);
+    }
+  };
+
+  const ActionButtons = ({ isMobile }) => (
+    <View style={styles.floatingActions}>
+      <Pressable 
+        style={[styles.fabActionDelete, !isMobile && styles.fabActionDeleteDesktop]} 
+        onPress={handleBulkDelete}
+      >
+        <MaterialIcons name="delete" size={isMobile ? 18 : 22} color={COLORS.textWhite} />
+        <ArText weight="700" style={[styles.fabActionText, !isMobile && { fontSize: 14 }]}>
+          حذف
+        </ArText>
+      </Pressable>
+
+      {Object.entries(STATUS_CONFIG).map(([key, config]) => (
+        <Pressable
+          key={key}
+          style={[
+            styles.fabActionStatus, 
+            { backgroundColor: config.color + '15', borderColor: config.color },
+            !isMobile && styles.fabActionStatusDesktop
+          ]}
+          onPress={() => handleBulkStatusChange(key)}
+        >
+            <MaterialIcons name={config.icon} size={isMobile ? 18 : 22} color={config.color} />
+            <ArText weight="700" style={{color: config.color, fontSize: isMobile ? 13 : 14}}>
+              {config.label}
+            </ArText>
+        </Pressable>
+      ))}
+    </View>
+  );
 
   // ==================== RENDER ====================
   return (
@@ -575,33 +832,7 @@ export default function AdminDashboard() {
           </ScrollView>
 
           {/* Bulk Actions - Collapsible on Mobile */}
-          {filteredRegistrations.length > 0 && (
-            <View style={[styles.bulkActions, isMobile && styles.bulkActionsMobile]}>
-              <ArText style={{ color: COLORS.textGray, fontSize: isMobile ? 12 : 14 }}>
-                {filteredRegistrations.length} تسجيل محدد
-              </ArText>
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                style={styles.bulkButtonsScroll}
-              >
-                <View style={styles.bulkButtons}>
-                  {Object.entries(STATUS_CONFIG).map(([key, config]) => (
-                    <Pressable
-                      key={key}
-                      style={[styles.bulkButton, { borderColor: config.color }]}
-                      onPress={() => handleBulkAction(key)}
-                    >
-                      <MaterialIcons name={config.icon} size={isMobile ? 14 : 16} color={config.color} />
-                      <ArText style={{ color: config.color, fontSize: isMobile ? 10 : 12 }}>
-                        {config.label}
-                      </ArText>
-                    </Pressable>
-                  ))}
-                </View>
-              </ScrollView>
-            </View>
-          )}
+          
         </View>
 
         {/* Error Message */}
@@ -611,6 +842,23 @@ export default function AdminDashboard() {
             <ArText style={styles.errorText}>{error}</ArText>
           </View>
         )}
+
+{/* Select All Header (Add above the list) */}
+<View style={styles.selectionHeader}>
+  <Pressable style={styles.selectAllBtn} onPress={handleSelectAll}>
+    <MaterialIcons 
+      name={selectedIds.size === filteredRegistrations.length && filteredRegistrations.length > 0 ? "check-box" : "check-box-outline-blank"} 
+      size={24} 
+      color={COLORS.textLight} 
+    />
+    <ArText style={{color: COLORS.textLight}}>
+      {selectedIds.size === filteredRegistrations.length ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+    </ArText>
+  </Pressable>
+  <ArText style={{color: COLORS.textGray}}>
+    تم تحديد: {selectedIds.size}
+  </ArText>
+</View>
 
         {/* Registrations List */}
         <View style={styles.list}>
@@ -629,29 +877,89 @@ export default function AdminDashboard() {
           ) : (
             filteredRegistrations.map((reg) => (
               <RegistrationCard
-                key={reg.id}
-                registration={reg}
-                isMobile={isMobile}
-                onView={() => {
-                  setSelectedRegistration(reg);
-                  setViewModalVisible(true);
-                }}
-                onEdit={() => {
-                  setSelectedRegistration(reg);
-                  setEditModalVisible(true);
-                }}
-                onDelete={() => handleDeleteRegistration(reg.id)}
-                onStatusChange={(newStatus) => 
-                  handleUpdateRegistration(reg.id, { status: newStatus })
-                }
-              />
+        key={reg.id}
+        registration={reg}
+        isMobile={isMobile}
+        // NEW PROPS HERE
+        isSelected={selectedIds.has(reg.id)}
+        onToggleSelect={() => toggleSelection(reg.id)}
+        // EXISTING PROPS
+        onView={() => {
+          setSelectedRegistration(reg);
+          setViewModalVisible(true);
+        }}
+        onEdit={() => {
+          setSelectedRegistration(reg);
+          setEditModalVisible(true);
+        }}
+        onDelete={() => handleDeleteRegistration(reg.id)} // Use the new Safe Delete
+        onStatusChange={(newStatus) => 
+          handleUpdateRegistration(reg.id, { status: newStatus })
+        }
+      />
             ))
           )}
         </View>
 
+      
+
         {/* Bottom Padding */}
         <View style={{ height: isMobile ? 20 : 40 }} />
       </ScrollView>
+
+  {/* ✅ ANIMATED FLOATING ACTION BAR ✅ */}
+  <Animated.View 
+        style={[
+          styles.floatingContainer, 
+          { 
+            transform: [{ 
+              translateY: slideAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [200, 0] // Start further down to hide completely
+              }) 
+            }],
+            opacity: slideAnim // Fade in as it slides up
+          } 
+        ]}
+      >
+        <View style={[styles.floatingBar, isMobile ? styles.floatingBarMobile : styles.floatingBarDesktop]}>
+          
+          {/* Left Side: Counter & Close */}
+          <View style={styles.floatingBarLeft}>
+            <Pressable onPress={clearSelection} style={styles.closeBtn}>
+              <MaterialIcons name="close" size={isMobile ? 20 : 24} color={COLORS.textWhite} />
+            </Pressable>
+            <View>
+              <ArText weight="700" style={styles.selectedCountText}>
+                {selectedIds.size} {isMobile ? 'محدد' : 'عناصر محددة'}
+              </ArText>
+              {!isMobile && (
+                <ArText style={styles.selectedSubText}>اختر إجراءً لتطبيقه</ArText>
+              )}
+            </View>
+          </View>
+          
+          {/* Vertical Divider */}
+          <View style={styles.verticalDivider} />
+
+          {/* Right Side: Actions */}
+          {/* Logic: If Mobile -> Scroll. If Desktop -> Show All Grid */}
+          {isMobile ? (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              contentContainerStyle={styles.floatingActionsContent}
+            >
+              <ActionButtons isMobile={true} />
+            </ScrollView>
+          ) : (
+            <View style={styles.desktopActionsRow}>
+              <ActionButtons isMobile={false} />
+            </View>
+          )}
+
+        </View>
+      </Animated.View>
 
       {/* Modals */}
       <ViewRegistrationModal
@@ -679,8 +987,20 @@ export default function AdminDashboard() {
 }
 
 // ==================== REGISTRATION CARD COMPONENT ====================
-const RegistrationCard = ({ registration, onView, onEdit, onDelete, onStatusChange, isMobile }) => {
+// ==================== REGISTRATION CARD COMPONENT ====================
+const RegistrationCard = ({ 
+  registration, 
+  onView, 
+  onEdit, 
+  onDelete, 
+  onStatusChange, 
+  isMobile,
+  isSelected,      
+  onToggleSelect   
+}) => {
   const [expanded, setExpanded] = useState(false);
+  const[bodyHeight, setBodyHeight] = useState(0); // Stores the exact height of the content
+  const animation = React.useRef(new Animated.Value(0)).current;
   
   if (!registration) return null;
 
@@ -688,165 +1008,237 @@ const RegistrationCard = ({ registration, onView, onEdit, onDelete, onStatusChan
   const statusConfig = STATUS_CONFIG[status] || STATUS_CONFIG.new;
   const nextStatus = statusConfig.nextStatus;
 
+  // Toggle Expansion smoothly
+  const toggleExpand = () => {
+    const willExpand = !expanded;
+    setExpanded(willExpand);
+
+    Animated.timing(animation, {
+      toValue: willExpand ? 1 : 0,
+      duration: 300,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: false, // Must be false when animating Layout properties (height)
+    }).start();
+  };
+
+  // 1. Interpolate Height (0 to measured height)
+  const animatedHeight = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange:[0, bodyHeight > 0 ? bodyHeight : 300], // Fallback to 300 before first measurement
+  });
+
+  // 2. Interpolate Arrow Rotation
+  const spin = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+
+  // 3. Interpolate Opacity (Fades in slightly after opening)
+  const contentOpacity = animation.interpolate({
+    inputRange: [0, 0.3, 1],
+    outputRange: [0, 0, 1],
+  });
+
   const handleCall = () => {
     if (registration.phone) {
-      if (Platform.OS === 'web') {
-        window.location.href = `tel:${registration.phone}`;
-      } else {
-        Linking.openURL(`tel:${registration.phone}`);
-      }
+      if (Platform.OS === 'web') window.location.href = `tel:${registration.phone}`;
+      else Linking.openURL(`tel:${registration.phone}`);
     }
   };
 
   const handleWhatsApp = () => {
     if (registration.phone) {
       const cleanPhone = registration.phone.replace(/[^0-9]/g, '');
-      if (Platform.OS === 'web') {
-        window.open(`https://wa.me/${cleanPhone}`, '_blank');
-      } else {
-        Linking.openURL(`whatsapp://send?phone=${cleanPhone}`);
-      }
+      if (Platform.OS === 'web') window.open(`https://wa.me/${cleanPhone}`, '_blank');
+      else Linking.openURL(`whatsapp://send?phone=${cleanPhone}`);
     }
   };
 
   return (
-    <View style={[styles.card, isMobile && styles.cardMobile]}>
-      <Pressable onPress={() => setExpanded(!expanded)} style={styles.cardHeader}>
-        <View style={styles.cardHeaderLeft}>
-          <View style={[styles.statusBadge, { backgroundColor: statusConfig.color }]}>
-            <ArText style={[styles.statusText, isMobile && styles.statusTextMobile]} weight="700">
-              {statusConfig.label}
-            </ArText>
-          </View>
-          <View style={styles.cardHeaderInfo}>
-            <ArText weight="700" style={[styles.cardName, isMobile && styles.cardNameMobile]}>
-              {registration.name || 'بدون اسم'}
-            </ArText>
-            <ArText style={[styles.cardPhone, isMobile && styles.cardPhoneMobile]}>
-              {registration.phone || ''}
-            </ArText>
-          </View>
-        </View>
-        <MaterialIcons
-          name={expanded ? 'expand-less' : 'expand-more'}
-          size={isMobile ? 20 : 24}
-          color={COLORS.textGray}
-        />
-      </Pressable>
+    <View style={[
+      styles.card, 
+      isMobile && styles.cardMobile,
+      isSelected && styles.cardSelected 
+    ]}>
+      {/* Card Header */}
+      <View style={styles.cardHeader}>
+        
+        {/* CHECKBOX */}
+        <Pressable 
+          onPress={onToggleSelect}
+          style={styles.checkboxContainer}
+          hitSlop={10}
+        >
+          <MaterialIcons 
+            name={isSelected ? "check-box" : "check-box-outline-blank"} 
+            size={24} 
+            color={isSelected ? COLORS.primary : COLORS.textGray} 
+          />
+        </Pressable>
 
-      {expanded && (
-        <View style={styles.cardContent}>
-          {/* Quick Status Change */}
-          {nextStatus && (
-            <Pressable
-              style={[styles.nextStatusButton, { borderColor: STATUS_CONFIG[nextStatus].color }]}
-              onPress={() => onStatusChange(nextStatus)}
-            >
-              <MaterialIcons name="arrow-forward" size={isMobile ? 14 : 16} color={STATUS_CONFIG[nextStatus].color} />
-              <ArText style={{ color: STATUS_CONFIG[nextStatus].color, fontSize: isMobile ? 11 : 12 }}>
-                تغيير إلى: {STATUS_CONFIG[nextStatus].label}
+        {/* Expandable Click Area */}
+        <Pressable 
+          onPress={toggleExpand} 
+          style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+        >
+          <View style={styles.cardHeaderLeft}>
+            <View style={[styles.statusBadge, { backgroundColor: statusConfig.color }]}>
+              <ArText style={[styles.statusText, isMobile && styles.statusTextMobile]} weight="700">
+                {statusConfig.label}
               </ArText>
-            </Pressable>
-          )}
+            </View>
+            <View style={styles.cardHeaderInfo}>
+              <ArText weight="700" style={[styles.cardName, isMobile && styles.cardNameMobile]}>
+                {registration.name || 'بدون اسم'}
+              </ArText>
+              <ArText style={[styles.cardPhone, isMobile && styles.cardPhoneMobile]}>
+                {registration.phone || ''}
+              </ArText>
+            </View>
+          </View>
+          
+          {/* Animated Arrow */}
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <MaterialIcons
+              name="expand-more"
+              size={isMobile ? 20 : 24}
+              color={COLORS.textGray}
+            />
+          </Animated.View>
+        </Pressable>
+      </View>
 
-          {/* Call Actions */}
-          {registration.phone && (
-            <View style={[styles.quickActions, isMobile && styles.quickActionsMobile]}>
+      {/* Expanded Details - ANIMATED WRAPPER */}
+      <Animated.View style={{ height: animatedHeight, overflow: 'hidden' }}>
+        
+        {/* INNER WRAPPER: Measures content exact height instantly on render */}
+        <Animated.View 
+          onLayout={(e) => {
+            const h = e.nativeEvent.layout.height;
+            if (h > 0 && h !== bodyHeight) setBodyHeight(h);
+          }}
+          style={{ 
+            position: 'absolute', 
+            width: '100%', 
+            top: 0,
+            opacity: contentOpacity // Smooth fade in
+          }}
+        >
+          <View style={styles.cardContent}>
+            
+            {/* Quick Status Change */}
+            {nextStatus && (
               <Pressable
-                style={[styles.callButton, { backgroundColor: COLORS.success + '20' }]}
-                onPress={handleCall}
+                style={[styles.nextStatusButton, { borderColor: STATUS_CONFIG[nextStatus].color }]}
+                onPress={() => onStatusChange(nextStatus)}
               >
-                <MaterialIcons name="phone" size={isMobile ? 16 : 18} color={COLORS.success} />
-                <ArText style={{ color: COLORS.success, marginLeft: 4, fontSize: isMobile ? 12 : 14 }}>
-                  اتصال
+                <MaterialIcons name="arrow-forward" size={isMobile ? 14 : 16} color={STATUS_CONFIG[nextStatus].color} />
+                <ArText style={{ color: STATUS_CONFIG[nextStatus].color, fontSize: isMobile ? 11 : 12 }}>
+                  تغيير إلى: {STATUS_CONFIG[nextStatus].label}
                 </ArText>
               </Pressable>
+            )}
+
+            {/* Call Actions */}
+            {registration.phone && (
+              <View style={[styles.quickActions, isMobile && styles.quickActionsMobile]}>
+                <Pressable
+                  style={[styles.callButton, { backgroundColor: COLORS.success + '20' }]}
+                  onPress={handleCall}
+                >
+                  <MaterialIcons name="phone" size={isMobile ? 16 : 18} color={COLORS.success} />
+                  <ArText style={{ color: COLORS.success, marginLeft: 4, fontSize: isMobile ? 12 : 14 }}>
+                    اتصال
+                  </ArText>
+                </Pressable>
+                
+                <Pressable
+                  style={[styles.whatsappButton, { backgroundColor: '#25D36620' }]}
+                  onPress={handleWhatsApp}
+                >
+                  <MaterialIcons name="chat" size={isMobile ? 16 : 18} color="#25D366" />
+                  <ArText style={{ color: '#25D366', marginLeft: 4, fontSize: isMobile ? 12 : 14 }}>
+                    واتساب
+                  </ArText>
+                </Pressable>
+              </View>
+            )}
+
+            {/* Details Grid */}
+            <View style={[styles.detailsGrid, isMobile && styles.detailsGridMobile]}>
+              {registration.email && (
+                <View style={styles.detailItem}>
+                  <MaterialIcons name="email" size={isMobile ? 14 : 16} color={COLORS.primary} />
+                  <ArText style={[styles.detailText, isMobile && styles.detailTextMobile]}>{registration.email}</ArText>
+                </View>
+              )}
               
-              <Pressable
-                style={[styles.whatsappButton, { backgroundColor: '#25D36620' }]}
-                onPress={handleWhatsApp}
-              >
-                <MaterialIcons name="chat" size={isMobile ? 16 : 18} color="#25D366" />
-                <ArText style={{ color: '#25D366', marginLeft: 4, fontSize: isMobile ? 12 : 14 }}>
-                  واتساب
+              <View style={styles.detailItem}>
+                <MaterialIcons name="location-on" size={isMobile ? 14 : 16} color={COLORS.primary} />
+                <ArText style={[styles.detailText, isMobile && styles.detailTextMobile]}>{registration.wilaya || 'غير محدد'}</ArText>
+              </View>
+              
+              <View style={styles.detailItem}>
+                <MaterialIcons name="business" size={isMobile ? 14 : 16} color={COLORS.primary} />
+                <ArText style={[styles.detailText, isMobile && styles.detailTextMobile]}>{registration.business_field || 'غير محدد'}</ArText>
+              </View>
+              
+              <View style={styles.detailItem}>
+                <MaterialIcons name="attach-money" size={isMobile ? 14 : 16} color={COLORS.primary} />
+                <ArText style={[styles.detailText, isMobile && styles.detailTextMobile]}>{registration.capital || 'غير محدد'}</ArText>
+              </View>
+              
+              <View style={styles.detailItem}>
+                <MaterialCommunityIcons name="factory" size={isMobile ? 14 : 16} color={COLORS.primary} />
+                <ArText style={[styles.detailText, isMobile && styles.detailTextMobile]}>
+                  {registration.visited_canton ? 'زار معرض كانتون' : 'لم يزر المعرض'}
                 </ArText>
+              </View>
+              
+              <View style={styles.detailItem}>
+                <MaterialIcons name="access-time" size={isMobile ? 14 : 16} color={COLORS.primary} />
+                <ArText style={[styles.detailText, isMobile && styles.detailTextMobile]}>
+                  {registration.created_at 
+                    ? new Date(registration.created_at).toLocaleDateString('ar-DZ', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                      })
+                    : 'تاريخ غير محدد'}
+                </ArText>
+              </View>
+
+              {registration.notes && (
+                <View style={[styles.detailItem, { width: '100%' }]}>
+                  <MaterialIcons name="note" size={isMobile ? 14 : 16} color={COLORS.primary} />
+                  <ArText style={[styles.detailText, isMobile && styles.detailTextMobile, { flex: 1 }]}>
+                    {registration.notes}
+                  </ArText>
+                </View>
+              )}
+            </View>
+
+            {/* Actions */}
+            <View style={[styles.cardActions, isMobile && styles.cardActionsMobile]}>
+              <Pressable style={[styles.actionButton, styles.actionView]} onPress={onView}>
+                <MaterialIcons name="visibility" size={isMobile ? 16 : 18} color={COLORS.textWhite} />
+                <ArText style={[styles.actionText, isMobile && styles.actionTextMobile]}>عرض</ArText>
+              </Pressable>
+
+              <Pressable style={[styles.actionButton, styles.actionEdit]} onPress={onEdit}>
+                <MaterialIcons name="edit" size={isMobile ? 16 : 18} color={COLORS.textWhite} />
+                <ArText style={[styles.actionText, isMobile && styles.actionTextMobile]}>تعديل</ArText>
+              </Pressable>
+
+              <Pressable style={[styles.actionButton, styles.actionDelete]} onPress={onDelete}>
+                <MaterialIcons name="delete" size={isMobile ? 16 : 18} color={COLORS.textWhite} />
+                <ArText style={[styles.actionText, isMobile && styles.actionTextMobile]}>حذف</ArText>
               </Pressable>
             </View>
-          )}
 
-          {/* Details Grid */}
-          <View style={[styles.detailsGrid, isMobile && styles.detailsGridMobile]}>
-            {registration.email ? (
-              <View style={styles.detailItem}>
-                <MaterialIcons name="email" size={isMobile ? 14 : 16} color={COLORS.primary} />
-                <ArText style={[styles.detailText, isMobile && styles.detailTextMobile]}>{registration.email}</ArText>
-              </View>
-            ) : null}
-            
-            <View style={styles.detailItem}>
-              <MaterialIcons name="location-on" size={isMobile ? 14 : 16} color={COLORS.primary} />
-              <ArText style={[styles.detailText, isMobile && styles.detailTextMobile]}>{registration.wilaya || 'غير محدد'}</ArText>
-            </View>
-            
-            <View style={styles.detailItem}>
-              <MaterialIcons name="business" size={isMobile ? 14 : 16} color={COLORS.primary} />
-              <ArText style={[styles.detailText, isMobile && styles.detailTextMobile]}>{registration.business_field || 'غير محدد'}</ArText>
-            </View>
-            
-            <View style={styles.detailItem}>
-              <MaterialIcons name="attach-money" size={isMobile ? 14 : 16} color={COLORS.primary} />
-              <ArText style={[styles.detailText, isMobile && styles.detailTextMobile]}>{registration.capital || 'غير محدد'}</ArText>
-            </View>
-            
-            <View style={styles.detailItem}>
-              <MaterialCommunityIcons name="factory" size={isMobile ? 14 : 16} color={COLORS.primary} />
-              <ArText style={[styles.detailText, isMobile && styles.detailTextMobile]}>
-                {registration.visited_canton ? 'زار معرض كانتون' : 'لم يزر المعرض'}
-              </ArText>
-            </View>
-            
-            <View style={styles.detailItem}>
-              <MaterialIcons name="access-time" size={isMobile ? 14 : 16} color={COLORS.primary} />
-              <ArText style={[styles.detailText, isMobile && styles.detailTextMobile]}>
-                {registration.created_at 
-                  ? new Date(registration.created_at).toLocaleDateString('ar-DZ', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                    })
-                  : 'تاريخ غير محدد'}
-              </ArText>
-            </View>
-
-            {registration.notes ? (
-              <View style={[styles.detailItem, { width: '100%' }]}>
-                <MaterialIcons name="note" size={isMobile ? 14 : 16} color={COLORS.primary} />
-                <ArText style={[styles.detailText, isMobile && styles.detailTextMobile, { flex: 1 }]}>
-                  {registration.notes}
-                </ArText>
-              </View>
-            ) : null}
           </View>
-
-          {/* Actions */}
-          <View style={[styles.cardActions, isMobile && styles.cardActionsMobile]}>
-            <Pressable style={[styles.actionButton, styles.actionView]} onPress={onView}>
-              <MaterialIcons name="visibility" size={isMobile ? 16 : 18} color={COLORS.textWhite} />
-              <ArText style={[styles.actionText, isMobile && styles.actionTextMobile]}>عرض</ArText>
-            </Pressable>
-
-            <Pressable style={[styles.actionButton, styles.actionEdit]} onPress={onEdit}>
-              <MaterialIcons name="edit" size={isMobile ? 16 : 18} color={COLORS.textWhite} />
-              <ArText style={[styles.actionText, isMobile && styles.actionTextMobile]}>تعديل</ArText>
-            </Pressable>
-
-            <Pressable style={[styles.actionButton, styles.actionDelete]} onPress={onDelete}>
-              <MaterialIcons name="delete" size={isMobile ? 16 : 18} color={COLORS.textWhite} />
-              <ArText style={[styles.actionText, isMobile && styles.actionTextMobile]}>حذف</ArText>
-            </Pressable>
-          </View>
-        </View>
-      )}
+        </Animated.View>
+      </Animated.View>
     </View>
   );
 };
@@ -879,7 +1271,7 @@ const ViewRegistrationModal = ({ visible, registration, onClose, isMobile }) => 
   return (
     <Modal transparent visible={visible} animationType="fade">
       <View style={styles.modalOverlay}>
-        <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.9)' }]} />
         <View style={[styles.modalContent, isMobile && styles.modalContentMobile]}>
           <View style={styles.modalHeader}>
             <ArText weight="900" style={[styles.modalTitle, isMobile && styles.modalTitleMobile]}>
@@ -2001,4 +2393,158 @@ const styles = StyleSheet.create({
   saveButton: {
     backgroundColor: COLORS.primary,
   },
+  // Add these to existing styles object
+  checkboxContainer: {
+    padding: 8,
+    marginLeft: -8, // Pull it slightly left
+  },
+  cardSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight,
+  },
+  selectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    marginBottom: 10,
+  },
+  selectAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+// ==================== FLOATING BAR STYLES ====================
+  
+floatingContainer: {
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  alignItems: 'center', // Centers the bar horizontally
+  zIndex: 9999,
+  paddingBottom: 30, // Lift it up slightly
+  pointerEvents: 'box-none',
+},
+
+floatingBar: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#0F172A', // Very dark blue/slate
+  borderRadius: 100, // Pill shape
+  borderWidth: 1,
+  borderColor: 'rgba(255,255,255,0.15)',
+  shadowColor: "#000",
+  shadowOffset: { width: 0, height: 10 },
+  shadowOpacity: 0.5,
+  shadowRadius: 25,
+  elevation: 20,
+  overflow: 'hidden', // Ensures inner content respects border radius
+},
+
+// Mobile: Compact, scrollable
+floatingBarMobile: {
+  width: '92%',
+  paddingVertical: 10,
+  paddingHorizontal: 12,
+},
+
+// Desktop: Big, wide, grid layout
+floatingBarDesktop: {
+  width: 'auto',
+  minWidth: 600,
+  maxWidth: 1000, // Much wider
+  paddingVertical: 16,
+  paddingHorizontal: 32,
+  borderRadius: 24, // Slightly less rounded for a "panel" look
+},
+
+floatingBarLeft: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 1,
+},
+
+closeBtn: {
+  backgroundColor: 'rgba(255,255,255,0.1)',
+  borderRadius: 50,
+  padding: 8,
+},
+
+selectedCountText: {
+  color: COLORS.textWhite,
+  fontSize: 16,
+},
+
+selectedSubText: {
+  color: COLORS.textGray,
+  fontSize: 12,
+  marginTop: 2,
+},
+
+verticalDivider: {
+  width: 1,
+  height: '60%',
+  backgroundColor: 'rgba(255,255,255,0.1)',
+  marginHorizontal: 2,
+},
+
+// Container for Mobile ScrollView content
+floatingActionsContent: {
+  paddingRight: 4,
+},
+
+// Container for Desktop Row
+desktopActionsRow: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  justifyContent: 'flex-end',
+  flex: 1,
+},
+
+floatingActions: {
+  flexDirection: 'row',
+  gap: 10,
+  alignItems: 'center',
+},
+
+// BUTTON STYLES
+fabActionDelete: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 8,
+  backgroundColor: COLORS.error,
+  paddingVertical: 10,
+  paddingHorizontal: 16,
+  borderRadius: 50,
+},
+
+fabActionDeleteDesktop: {
+  paddingVertical: 12,
+  paddingHorizontal: 24,
+  marginRight: 12, // Separate delete from status
+},
+
+fabActionText: {
+  color: COLORS.textWhite,
+  fontSize: 13,
+},
+
+fabActionStatus: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 8,
+  paddingVertical: 10,
+  paddingHorizontal: 16,
+  borderRadius: 50,
+  borderWidth: 1,
+  backgroundColor: 'rgba(255,255,255,0.05)',
+},
+
+fabActionStatusDesktop: {
+  paddingVertical: 12,
+  paddingHorizontal: 20,
+  minWidth: 120, // Ensure buttons have good width
+  justifyContent: 'center',
+},
 });
